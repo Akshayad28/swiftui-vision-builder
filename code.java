@@ -1,39 +1,48 @@
 public List<String> getMonitorSedolValue(Connection connection, String monitor) throws DBExceptions {
 
     List<String> sedolList = new ArrayList<>();
+
     PreparedStatement ps = null;
     ResultSet rs = null;
 
+    // Always select all so metadata shows ALL columns Oracle returns
     String query = "SELECT * FROM your_table WHERE MONITOR = ?";
 
     try {
 
         ps = connection.prepareStatement(query);
         ps.setString(1, monitor);
-
         rs = ps.executeQuery();
 
-        ResultSetMetaData md = rs.getMetaData();
-        int colCount = md.getColumnCount();
+        // Print columns actually returned to JDBC
+        ResultSetMetaData meta = rs.getMetaData();
+        int colCount = meta.getColumnCount();
 
-        // FIND SEDOL COLUMN (case insensitive)
-        int sedolIndex = -1;
+        System.out.println("=== JDBC Columns Returned ===");
         for (int i = 1; i <= colCount; i++) {
-            if (md.getColumnName(i).equalsIgnoreCase("SEDOL")) {
-                sedolIndex = i;
+            System.out.println("COL " + i + ": " + meta.getColumnName(i));
+        }
+
+        // Find SEDOL column dynamically
+        int sedolColumnIndex = -1;
+
+        for (int i = 1; i <= colCount; i++) {
+            if (meta.getColumnName(i).equalsIgnoreCase("SEDOL")) {
+                sedolColumnIndex = i;
                 break;
             }
         }
 
-        if (sedolIndex == -1) {
-            throw new RuntimeException("SEDOL column NOT FOUND in query result");
+        if (sedolColumnIndex == -1) {
+            throw new RuntimeException("SEDOL column NOT found in JDBC ResultSet.");
         }
 
+        // Read ALL rows
         while (rs.next()) {
-            sedolList.add(rs.getString(sedolIndex));
+            sedolList.add(rs.getString(sedolColumnIndex));
         }
 
-    } catch (Exception e) {
+    } catch (SQLException e) {
         throw new DBExceptions(e);
 
     } finally {
