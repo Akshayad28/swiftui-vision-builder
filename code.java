@@ -1,39 +1,32 @@
-public List<String> getMonitorNamesFromExcel() {
+@When("Get sedol values for monitors from excel and TCID={string}")
+public void getSedolCountForMonitorComplete(String TCID) throws SQLException {
 
-    List<String> monitorList = new ArrayList<>();
+    List<String> monitorList = excelWriteClass.getMonitorNamesFromExcel();
 
-    try {
+    for (String monitor : monitorList) {
 
-        FileInputStream fis = new FileInputStream(
-                System.getProperty("user.dir")
-                        + "/src/test/resources/excelfiles/MonitorNames_TestData.xlsx");
+        System.out.println("TestCase " + TCID + " execution starts for monitor: " + monitor);
+        testScenario.log("TestCase " + TCID + " execution starts for monitor: " + monitor);
 
-        Workbook workbook = new XSSFWorkbook(fis);
+        preProdSedolList =
+                databaseResultSet.getMonitorSedolValue(
+                        Hooks.preprodConn,
+                        monitor.replace("%", "%%")
+                );
 
-        Sheet sheet = workbook.getSheet("TestData");
+        System.out.println("Monitor Name in preprod: " + monitor);
+        testScenario.log("Monitor Name in preprod: " + monitor);
 
-        int rowCount = sheet.getLastRowNum();
+        prodSedolList =
+                databaseResultSet.getMonitorSedolValue(
+                        Hooks.prodConn,
+                        monitor.replace("%", "%%")
+                );
 
-        for (int i = 1; i <= rowCount; i++) {
+        System.out.println("Monitor Name in Prod: " + monitor);
+        testScenario.log("Monitor Name in Prod: " + monitor);
 
-            Row row = sheet.getRow(i);
-
-            if (row != null) {
-
-                Cell cell = row.getCell(0);
-
-                if (cell != null) {
-
-                    monitorList.add(cell.getStringCellValue().trim());
-                }
-            }
-        }
-
-        workbook.close();
-
-    } catch (Exception e) {
-        e.printStackTrace();
+        // Run comparison step manually
+        compareSedolList(monitor);
     }
-
-    return monitorList;
 }
