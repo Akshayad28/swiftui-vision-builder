@@ -1,22 +1,41 @@
-@After
-public void closeConnection(Scenario scenario) {
+public static void writeData(String scenarioName) {
+
+    Date now = new Date();
+    SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy");
+    String timeDate = sdf.format(now);
 
     try {
 
-        if (preprodConn != null) {
-            preprodConn.close();
+        // Base path
+        String basePath = System.getProperty("user.dir") + "/src/test/resources/excelfiles/";
+
+        // Create scenario folder
+        File scenarioFolder = new File(basePath + scenarioName);
+
+        if (!scenarioFolder.exists()) {
+            scenarioFolder.mkdirs();
         }
 
-        if (prodConn != null) {
-            prodConn.close();
+        // Excel file inside scenario folder
+        File file = new File(
+                scenarioFolder + "/OracleTestResults_" + timeDate + ".xlsx"
+        );
+
+        try (FileOutputStream outputStream = new FileOutputStream(file)) {
+
+            workbook.write(outputStream);
+
+            System.out.println("Excel file written successfully at: " + file.getAbsolutePath());
         }
 
-        isDBConnected = false;
+    } catch (IOException e) {
+        e.printStackTrace();
+    } finally {
 
-        // Pass workbook and scenario name
-        ExcelWriteClass.writeData(workbook, scenario.getName());
-
-    } catch (Exception e) {
-        throw new RuntimeException(e);
+        try {
+            workbook.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
