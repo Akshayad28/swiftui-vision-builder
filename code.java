@@ -1,21 +1,35 @@
-String baseSheetName = monitor.replaceAll("[\\\\/?*\\[\\]]", "_");
+import org.apache.poi.ss.usermodel.*;
 
-// Excel sheet name limit = 31 characters
-if (baseSheetName.length() > 25) {
-    baseSheetName = baseSheetName.substring(0, 25);
+public String getCellValue(String columnName, int rowNum) {
+
+    Row row = worksheet.getRow(rowNum);
+    Cell cell = row.getCell(colByName.get(columnName));
+
+    if (cell == null) {
+        return "";
+    }
+
+    switch (cell.getCellType()) {
+
+        case NUMERIC:
+            return String.valueOf(cell.getNumericCellValue());
+
+        case STRING:
+            return cell.getStringCellValue();
+
+        case BOOLEAN:
+            return String.valueOf(cell.getBooleanCellValue());
+
+        case BLANK:
+            return "";
+
+        case ERROR:
+            return String.valueOf(cell.getErrorCellValue());
+
+        case FORMULA:
+            return String.valueOf(cell.getNumericCellValue());
+
+        default:
+            return "";
+    }
 }
-
-String sheetName = baseSheetName;
-int counter = 1;
-
-// Ensure unique sheet name
-while (ExcelWriteClass.workbook.getSheet(sheetName) != null) {
-    sheetName = baseSheetName + "_" + counter;
-    counter++;
-}
-
-excelWriteClass.writeSedolRows(
-        sheetName,
-        headers,
-        excelRows
-);
