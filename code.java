@@ -1,41 +1,48 @@
-public static void writeData(String scenarioName) {
+public List<String> getMonitorNamesFromExcel() {
 
-    Date now = new Date();
-    SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy");
-    String timeDate = sdf.format(now);
+    List<String> monitorList = new ArrayList<>();
 
     try {
 
-        // Base path
-        String basePath = System.getProperty("user.dir") + "/src/test/resources/excelfiles/";
+        FileInputStream fis = new FileInputStream(
+                System.getProperty("user.dir")
+                        + "/src/test/resources/excelfiles/MonitorNames_TestData.xlsx");
 
-        // Create scenario folder
-        File scenarioFolder = new File(basePath + scenarioName);
+        Workbook workbook = new XSSFWorkbook(fis);
 
-        if (!scenarioFolder.exists()) {
-            scenarioFolder.mkdirs();
+        Sheet sheet = workbook.getSheet("TestData");
+
+        int rowCount = sheet.getLastRowNum();
+
+        for (int i = 1; i <= rowCount; i++) {
+
+            Row row = sheet.getRow(i);
+
+            if (row == null) {
+                continue;
+            }
+
+            Cell cell = row.getCell(0);
+
+            if (cell == null) {
+                continue;
+            }
+
+            String monitor = cell.toString().trim();
+
+            // Skip empty monitor rows
+            if (monitor.isEmpty()) {
+                continue;
+            }
+
+            monitorList.add(monitor);
         }
 
-        // Excel file inside scenario folder
-        File file = new File(
-                scenarioFolder + "/OracleTestResults_" + timeDate + ".xlsx"
-        );
+        workbook.close();
 
-        try (FileOutputStream outputStream = new FileOutputStream(file)) {
-
-            workbook.write(outputStream);
-
-            System.out.println("Excel file written successfully at: " + file.getAbsolutePath());
-        }
-
-    } catch (IOException e) {
+    } catch (Exception e) {
         e.printStackTrace();
-    } finally {
-
-        try {
-            workbook.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
+
+    return monitorList;
 }
