@@ -1,6 +1,29 @@
-java -cp target/Lho-etl-automation-1.0-SNAPSHOT.jar org.testng.TestNG testng.xml
-java -cp target/Lho-etl-automation-1.0-SNAPSHOT-shaded.jar org.testng.TestNG testng.xml
-jar tf target/Lho-etl-automation-1.0-SNAPSHOT.jar | findstr TestNG
+package com.barclays.testautomation.runner;
 
-mvn help:evaluate -Dexpression=project.packaging -q -DforceStdout
-java -cp "target/lho-etl-automation-1.0-SNAPSHOT.jar;target/test-classes;target/classes;target/dependency/*" org.testng.TestNG testng.xml
+import io.cucumber.testng.AbstractTestNGCucumberTests;
+import io.cucumber.testng.CucumberOptions;
+import org.testng.TestNG;
+
+import java.util.Arrays;
+
+@CucumberOptions(
+        features = "src/main/resources/features",
+        glue = "com.barclays.testautomation",
+        plugin = {
+                "pretty",
+                "html:target/cucumber-report.html",
+                "json:target/cucumber-report.json"
+        },
+        monochrome = true
+)
+public class RunnerIT_TestNG extends AbstractTestNGCucumberTests {
+
+    public static void main(String[] args) {
+
+        TestNG testng = new TestNG();
+        testng.setTestSuites(Arrays.asList("testng.xml"));
+        testng.run();
+
+    }
+
+}
