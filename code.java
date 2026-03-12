@@ -1,48 +1,25 @@
-public List<String> getMonitorNamesFromExcel() {
+   <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-shade-plugin</artifactId>
+            <version>3.5.0</version>
 
-    List<String> monitorList = new ArrayList<>();
+            <executions>
+                <execution>
+                    <phase>package</phase>
+                    <goals>
+                        <goal>shade</goal>
+                    </goals>
 
-    try {
+                    <configuration>
+                        <transformers>
 
-        FileInputStream fis = new FileInputStream(
-                System.getProperty("user.dir")
-                        + "/src/test/resources/excelfiles/MonitorNames_TestData.xlsx");
+                            <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                <mainClass>org.junit.runner.JUnitCore</mainClass>
+                            </transformer>
 
-        Workbook workbook = new XSSFWorkbook(fis);
+                        </transformers>
+                    </configuration>
 
-        Sheet sheet = workbook.getSheet("TestData");
-
-        int rowCount = sheet.getLastRowNum();
-
-        for (int i = 1; i <= rowCount; i++) {
-
-            Row row = sheet.getRow(i);
-
-            if (row == null) {
-                continue;
-            }
-
-            Cell cell = row.getCell(0);
-
-            if (cell == null) {
-                continue;
-            }
-
-            String monitor = cell.toString().trim();
-
-            // Skip empty monitor rows
-            if (monitor.isEmpty()) {
-                continue;
-            }
-
-            monitorList.add(monitor);
-        }
-
-        workbook.close();
-
-    } catch (Exception e) {
-        e.printStackTrace();
-    }
-
-    return monitorList;
-}
+                </execution>
+            </executions>
+        </plugin>
