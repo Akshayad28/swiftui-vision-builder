@@ -1,25 +1,25 @@
-   <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-shade-plugin</artifactId>
-            <version>3.5.0</version>
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-shade-plugin</artifactId>
+    <version>3.5.0</version>
 
-            <executions>
-                <execution>
-                    <phase>package</phase>
-                    <goals>
-                        <goal>shade</goal>
-                    </goals>
+    <executions>
+        <execution>
+            <phase>package</phase>
+            <goals>
+                <goal>shade</goal>
+            </goals>
 
-                    <configuration>
-                        <transformers>
+            <configuration>
+                <createDependencyReducedPom>false</createDependencyReducedPom>
 
-                            <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                <mainClass>org.junit.runner.JUnitCore</mainClass>
-                            </transformer>
+                <transformers>
+                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                        <mainClass>org.testng.TestNG</mainClass>
+                    </transformer>
+                </transformers>
 
-                        </transformers>
-                    </configuration>
-
-                </execution>
-            </executions>
-        </plugin>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
