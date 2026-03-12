@@ -1,25 +1,5 @@
-<plugin>
-    <groupId>org.apache.maven.plugins</groupId>
-    <artifactId>maven-shade-plugin</artifactId>
-    <version>3.5.0</version>
+java -cp target/Lho-etl-automation-1.0-SNAPSHOT.jar org.testng.TestNG testng.xml
+java -cp target/Lho-etl-automation-1.0-SNAPSHOT-shaded.jar org.testng.TestNG testng.xml
+jar tf target/Lho-etl-automation-1.0-SNAPSHOT.jar | findstr TestNG
 
-    <executions>
-        <execution>
-            <phase>package</phase>
-            <goals>
-                <goal>shade</goal>
-            </goals>
-
-            <configuration>
-                <createDependencyReducedPom>false</createDependencyReducedPom>
-
-                <transformers>
-                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                        <mainClass>org.testng.TestNG</mainClass>
-                    </transformer>
-                </transformers>
-
-            </configuration>
-        </execution>
-    </executions>
-</plugin>
+    
