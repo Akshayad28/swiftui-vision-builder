@@ -1,37 +1,7 @@
-<assembly xmlns="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.3"
-          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.3 
-          http://maven.apache.org/xsd/assembly-1.1.3.xsd">
+// Load resource to ensure it exists inside jar
+        InputStream stream =
+                DBSQL.class.getClassLoader().getResourceAsStream(DB_PROPERTIES);
 
-    <id>jar-with-dependencies</id>
-
-    <formats>
-        <format>jar</format>
-    </formats>
-
-    <includeBaseDirectory>false</includeBaseDirectory>
-
-    <!-- MAIN CLASSES -->
-    <fileSets>
-        <fileSet>
-            <directory>${project.build.outputDirectory}</directory>
-            <outputDirectory>/</outputDirectory>
-        </fileSet>
-
-        <!-- TEST CLASSES -->
-        <fileSet>
-            <directory>${project.build.testOutputDirectory}</directory>
-            <outputDirectory>/</outputDirectory>
-        </fileSet>
-    </fileSets>
-
-    <!-- DEPENDENCIES -->
-    <dependencySets>
-        <dependencySet>
-            <outputDirectory>/</outputDirectory>
-            <unpack>true</unpack>
-            <scope>runtime</scope>
-        </dependencySet>
-    </dependencySets>
-
-</assembly>
+        if (stream == null) {
+            throw new RuntimeException("❌ application-preprod.yaml not found in classpath");
+        
