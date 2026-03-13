@@ -1,31 +1,23 @@
-<plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <includes>
-                        **/RunCukesByFeatureWeb.java
-                    </includes>
-                    <!--					<suiteXmlFiles>-->
-                    <!--						<suiteXmlFile>testng.xml</suiteXmlFile>-->
-                    <!--					</suiteXmlFiles>-->
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <!-- <version>3.7</version> -->
-                <configuration>
+<assembly xmlns="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.3"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.3
+          http://maven.apache.org/xsd/assembly-1.1.3.xsd">
 
-                    <descriptors><descriptor>src/test/resources/assembly.xml</descriptor></descriptors>
+    <id>jar-with-dependencies</id>
 
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>make-assembly</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
+    <formats>
+        <format>jar</format>
+    </formats>
+
+    <includeBaseDirectory>false</includeBaseDirectory>
+
+    <dependencySets>
+        <dependencySet>
+            <outputDirectory>/</outputDirectory>
+            <useProjectArtifact>true</useProjectArtifact>
+            <unpack>true</unpack>
+            <scope>runtime</scope>
+        </dependencySet>
+    </dependencySets>
+
+</assembly>
