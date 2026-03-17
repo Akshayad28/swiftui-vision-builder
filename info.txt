@@ -1,0 +1,27 @@
+ETL Code Analysis and Framework Optimization:
+
+Successfully optimized the framework by improving code quality and resolving multiple dependency-related issues.
+
+Reduced load on the database port by implementing proper DB connection closure.
+
+Implemented functionality to read input test data dynamically from an Excel sheet.
+
+Enhanced the output Excel generation process by fixing the overwrite issue present in the previous implementation.
+
+Test Case Automation:
+
+Automated a total of 2 test cases.
+
+SEDOL Validation – PreProd vs Prod:
+
+Executed queries to fetch SEDOL values for monitors provided via the Excel input sheet.
+
+Captured and printed MONITOR and corresponding SEDOL values for both PreProd and Prod environments.
+
+Compared PreProd SEDOL values with Prod and recorded the result in a MATCH_STATUS column (TRUE/FALSE).
+
+SEDOL Validation – Prod vs PreProd:
+
+Performed reverse validation by comparing Prod SEDOL values against PreProd.
+
+Logged the comparison results along with match status (TRUE/FALSE) in the output file.
