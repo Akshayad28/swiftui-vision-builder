@@ -10,19 +10,30 @@ public static void writeData(String scenarioName) {
 
         String basePath = System.getProperty("user.dir") + "/src/test/resources/excelfiles/";
 
+        // ✅ Clean scenario name (important)
+        if (scenarioName == null || scenarioName.trim().isEmpty()) {
+            scenarioName = "DefaultScenario";
+        }
+
+        scenarioName = scenarioName
+                .replaceAll("[\\\\/:*?\"<>|]", "_")  // remove invalid chars
+                .trim();
+
+        // ✅ Create folder with scenario name
         File scenarioFolder = new File(basePath + scenarioName);
 
         if (!scenarioFolder.exists()) {
             scenarioFolder.mkdirs();
         }
 
+        // ✅ Create file
         File file = new File(
                 scenarioFolder + "/OracleTestResults_" + timeDate + ".xlsx"
         );
 
         outputStream = new FileOutputStream(file);
 
-        // ✅ This writes FULL workbook (all sheets)
+        // ✅ Write FULL workbook (all sheets preserved)
         workbook.write(outputStream);
 
         System.out.println("✅ Excel written at: " + file.getAbsolutePath());
@@ -37,6 +48,6 @@ public static void writeData(String scenarioName) {
         }
     }
 
-    // ❌ REMOVE THIS LINE (VERY IMPORTANT)
+    // ❌ REMOVE THIS LINE (CRITICAL FIX)
     // workbook = new XSSFWorkbook();
 }
