@@ -1,35 +1,21 @@
-public static void writeData(String outlineName) {
-
-    // null guard
-    if (outlineName == null || outlineName.trim().isEmpty()) {
-        outlineName = "UnknownScenario";
-    }
-
-    Date now = new Date();
-    SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy_HH-mm-ss");
-    String timeDate = sdf.format(now);
-
-    String safeName = outlineName.replaceAll("[^a-zA-Z0-9_-]", "_");
-
-    File file = new File(
-        System.getProperty("user.dir")
-        + "/src/test/resources/excelfiles/"
-        + "OracleTestResults_"
-        + safeName + "_"
-        + timeDate
-        + ".xlsx"
-    );
-
-    try (FileOutputStream outputStream = new FileOutputStream(file)) {
-        workbook.write(outputStream);
-        System.out.println("Excel file written: " + file.getName());
-    } catch (IOException e) {
-        e.printStackTrace();
-    } finally {
-        try {
-            workbook.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+private static String extractOutlineId(Scenario scenario) {
+    try {
+        // ✅ Tags are SAME for all examples of one outline
+        // e.g. [@XT-LH-3635, @XT-LH-3628, @monitorAccuracy]
+        // and DIFFERENT for different outlines
+        // e.g. [@XT-LH-3635, @XT-LH-3627, @monitorCompleteness]
+        Collection<String> tags = scenario.getSourceTagNames();
+        
+        // Sort tags so order doesn't matter, join as single string key
+        List<String> sortedTags = new ArrayList<>(tags);
+        Collections.sort(sortedTags);
+        String tagKey = String.join("_", sortedTags);
+        
+        System.out.println("Tag Key : " + tagKey); // debug
+        
+        return tagKey.isEmpty() ? "UnknownOutline" : tagKey;
+        
+    } catch (Exception e) {
+        return "UnknownOutline";
     }
 }
