@@ -1,28 +1,40 @@
 public static void writeData() {
 
-    FileOutputStream fos = null;
+    FileOutputStream outputStream = null;
 
     try {
 
-        if (workbook == null) {
-            System.out.println("⚠ Workbook is null, nothing to write");
-            return;
-        }
+        // 👉 Generate timestamp (same as your code)
+        Date now = new Date();
+        SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy_HH-mm-ss");
+        String timeDate = sdf.format(now);
 
-        fos = new FileOutputStream(file);
+        // 👉 File path
+        File file = new File(
+                System.getProperty("user.dir")
+                        + "/src/test/resources/excelfiles/"
+                        + "OracleTestResults_" + timeDate + ".xlsx"
+        );
 
-        // 👉 This writes EXISTING workbook (no reset)
-        workbook.write(fos);
+        // 👉 Write workbook (NO RESET)
+        outputStream = new FileOutputStream(file);
+        workbook.write(outputStream);
 
-        System.out.println("📁 Excel file written successfully: " + file.getAbsolutePath());
+        System.out.println("✅ Excel file written successfully at: " + file.getAbsolutePath());
 
-    } catch (Exception e) {
+    } catch (IOException e) {
         e.printStackTrace();
     } finally {
+
         try {
-            if (fos != null) fos.close();
-        } catch (Exception e) {
+            if (outputStream != null) {
+                outputStream.close();
+            }
+        } catch (IOException e) {
             e.printStackTrace();
         }
+
+        // ❗ IMPORTANT: DO NOT close workbook here
+        // workbook.close(); ❌ REMOVE THIS LINE
     }
 }
