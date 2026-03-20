@@ -1,25 +1,91 @@
+public class Hooks {
+
+    private static XSSFWorkbook workbook;
+    private static String currentOutlineName;   // tracks which outline is running
+    private static boolean isDBConnected = false;
+
+    private static Connection preprodConn;
+    private static Connection prodConn;
+    private static DBSQL preprodDbSql;
+    private static DBSQL prodDbSql;
+
+    private Scenario testScenario;
+
+    // Extracts base outline name by stripping parameterized values
+    // e.g. "To verify completeness monitor=Monitor-India TCID=MLTC001"
+    //   -> "To verify completeness"
+    private static String extractOutlineName(Scenario scenario) {
+        // Cucumber scenario outline names contain the example values appended
+        // We use the URI + line-number group OR simply the first part before any param pattern
+        // Simplest reliable way: use the feature URI + scenario name up to first param
+        String rawName = scenario.getName();
+        // Strip anything after the first example parameter pattern if present
+        // Adjust this split logic based on how your scenario names look
+        return rawName.replaceAll("\\s*[A-Z].*=.*", "").trim();
+    }
+
+    @Before
+    public void setup(Scenario scenario) {
+        this.testScenario = scenario;
+
+        String incomingOutlineName = extractOutlineName(scenario);
+
+        // ✅ Detect outline change — flush previous workbook and start fresh
+        if (currentOutlineName != null 
+                && !currentOutlineName.equals(incomingOutlineName)) {
+            
+            System.out.println("New outline detected — writing Excel for: " 
+                + currentOutlineName);
+            
+            // Write Excel for the PREVIOUS outline before resetting
+            ExcelWriteClass.writeData(workbook, currentOutlineName);
+            workbook = null;  // reset for new outline
+        }
+
+        // ✅ Initialize workbook for new outline (or first outline)
+        if (workbook == null) {
+            workbook = new XSSFWorkbook();
+            currentOutlineName = incomingOutlineName;
+        }
+
+        // Open DB connections only once across all scenarios
+        if (!isDBConnected) {
+            try {
+                String Preprod_DB_Password = Security.decrypt(DBPassword);
+                preprodDbSql = new DBSQL(DbURL, DBUser, Preprod_DB_Password);
+                preprodConn = preprodDbSql.getConnection();
+                testScenario.log("PreProd connection is successfully connected.");
+
+                String Prod_DB_Password = Security.decrypt(PROD_DB_PASSWORD);
+                prodDbSql = new DBSQL(PROD_DbURL, PROD_DB_USERNAME, Prod_DB_Password);
+                prodConn = prodDbSql.getConnection();
+                testScenario.log("Prod connection is successfully connected.");
+
+                isDBConnected = true;
+            } catch (SQLException e) {
+                throw new DBExceptions(e);
+            }
+        }
+    }
+
     @After
     public void afterEachScenario(Scenario scenario) {
-        // ✅ Each example row's data gets written into the shared workbook
-        // (Your step definitions should be adding sheets/rows to ExcelWriteClass.workbook)
-        // Just log — do NOT write the file here
+        // Just log — workbook is being populated by step definitions
         System.out.println("Example completed: " + scenario.getName());
         scenario.log("Example completed: " + scenario.getName());
-
-        // ✅ DO NOT close DB connections here — reuse them across examples
-        // ✅ DO NOT write Excel here — wait for @AfterAll
+        // ✅ No file write here, no DB close here
     }
 
     @AfterAll
     public static void tearDownAll() {
-        // ✅ Write ONE Excel file after ALL examples of the outline are done
+        // ✅ Write Excel for the LAST outline (not caught by @Before transition)
         if (workbook != null) {
-            ExcelWriteClass.writeData(workbook, outlineName);
+            ExcelWriteClass.writeData(workbook, currentOutlineName);
             workbook = null;
-            outlineName = null;
+            currentOutlineName = null;
         }
 
-        // ✅ Close DB connections once, after everything is done
+        // ✅ Close DB connections once at the very end
         try {
             if (preprodConn != null && !preprodConn.isClosed()) {
                 preprodConn.close();
@@ -35,34 +101,23 @@
         }
     }
 }
+```
 
+---
 
-public static void writeData(XSSFWorkbook workbook, String outlineName) {
-        Date now = new Date();
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy_HH-mm-ss");
-        String timeDate = sdf.format(now);
+**How it works for your case (2 outlines × 5 examples):**
+```
+Outline 1 - Example 1  →  @Before: workbook created, outlineName = "Outline1"
+Outline 1 - Example 2  →  @Before: same outline, reuse workbook
+Outline 1 - Example 3  →  @Before: same outline, reuse workbook
+Outline 1 - Example 4  →  @Before: same outline, reuse workbook
+Outline 1 - Example 5  →  @Before: same outline, reuse workbook
 
-        String safeName = outlineName.replaceAll("[^a-zA-Z0-9_-]", "_");
+Outline 2 - Example 1  →  @Before: outline changed! ✅ WRITE Outline1.xlsx
+                                    new workbook created, outlineName = "Outline2"
+Outline 2 - Example 2  →  @Before: same outline, reuse workbook
+Outline 2 - Example 3  →  @Before: same outline, reuse workbook
+Outline 2 - Example 4  →  @Before: same outline, reuse workbook
+Outline 2 - Example 5  →  @Before: same outline, reuse workbook
 
-        File file = new File(
-            System.getProperty("user.dir")
-            + "/src/test/resources/excelfiles/"
-            + "OracleTestResults_"
-            + safeName + "_"
-            + timeDate
-            + ".xlsx"
-        );
-
-        try (FileOutputStream outputStream = new FileOutputStream(file)) {
-            workbook.write(outputStream);
-            System.out.println("Excel file written successfully: " + file.getName());
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                workbook.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
+@AfterAll              →  ✅ WRITE Outline2.xlsx  (last outline always written here)
