@@ -1,80 +1,62 @@
-private static Set<String> executed = new HashSet<>();
-private static Set<String> pendingWrite = new HashSet<>();
+import io.cucumber.java.Before;
+import io.cucumber.java.After;
+import io.cucumber.java.Scenario;
 
-@After
-public void afterScenario(Scenario scenario) {
+import java.util.HashMap;
+import java.util.Map;
 
-    String scenarioId = scenario.getUri() + ":" + scenario.getLine();
+public class Hooks {
 
-    // Mark this scenario outline as executed
-    pendingWrite.add(scenarioId);
-}
+    private static Map<String, Integer> executionCount = new HashMap<>();
+    private static Map<String, Integer> expectedCount = new HashMap<>();
+    private static Map<String, String> scenarioTagMap = new HashMap<>();
 
+    @Before
+    public void beforeScenario(Scenario scenario) {
 
+        String scenarioId = scenario.getUri() + ":" + scenario.getLine();
 
+        // Count executions
+        int count = executionCount.getOrDefault(scenarioId, 0) + 1;
+        executionCount.put(scenarioId, count);
 
+        // Expected count auto-adjust
+        expectedCount.put(scenarioId, count);
 
-@AfterAll
-public static void finalWrite() {
+        // Capture tag (ONLY ONCE)
+        if (!scenarioTagMap.containsKey(scenarioId)) {
 
-    for (String scenarioId : pendingWrite) {
+            String tagName = scenario.getSourceTagNames()
+                    .stream()
+                    .map(tag -> tag.replace("@", ""))
+                    .reduce((a, b) -> a + "_" + b) // multiple tags
+                    .orElse("DefaultTag");
 
-        ExcelWriteClass.writeData(Hooks.tagName);
-
-        System.out.println("📊 Excel created ONCE for: " + scenarioId);
+            scenarioTagMap.put(scenarioId, tagName);
+        }
     }
 
-    // Close DB here
-    DBConnectionManager.close();
-}
+    @After
+    public void afterScenario(Scenario scenario) {
 
+        String scenarioId = scenario.getUri() + ":" + scenario.getLine();
 
+        int executed = executionCount.get(scenarioId);
+        int expected = expectedCount.get(scenarioId);
 
-@Before
-public void setUp(Scenario scenario) {
+        // ✅ ONLY LAST ROW OF SCENARIO OUTLINE
+        if (executed == expected) {
 
-    String scenarioId = scenario.getUri() + ":" + scenario.getLine();
+            String tagName = scenarioTagMap.get(scenarioId);
 
-    String tag = scenario.getSourceTagNames()
-            .stream()
-            .map(t -> t.replace("@", ""))
-            .findFirst()
-            .orElse("DefaultTag");
+            ExcelWriteClass.writeData(tagName);
 
-    scenarioTagMap.putIfAbsent(scenarioId, tag);
-}
+            System.out.println("📊 Excel created for: " + tagName);
 
-
-
-
-
-
-@After
-public void afterScenario(Scenario scenario) {
-
-    String scenarioId = scenario.getUri() + ":" + scenario.getLine();
-
-    executed.add(scenarioId);
-}
-
-
-
-@AfterAll
-public static void finalWrite() {
-
-    for (Map.Entry<String, String> entry : scenarioTagMap.entrySet()) {
-
-        String scenarioId = entry.getKey();
-        String tag = entry.getValue();
-
-        ExcelWriteClass.writeData(tag);
-
-        System.out.println("📊 Excel created for: " + scenarioId);
+            // Cleanup for next scenario
+            executionCount.remove(scenarioId);
+            expectedCount.remove(scenarioId);
+            scenarioTagMap.remove(scenarioId);
+        }
     }
-
-    DBConnectionManager.close();
-    System.out.println("🔒 DB Closed");
 }
-
-
-private static Map<String, String> scenarioTagMap = new HashMap<>();
