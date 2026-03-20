@@ -1,82 +1,82 @@
-private static Map<String, Integer> executionCount = new HashMap<>();
-private static Map<String, Integer> lastSeenCount = new HashMap<>();
-
-
 @Before
-public void beforeScenario(Scenario scenario) {
+public void setup(Scenario scenario) {
+    this.testScenario = scenario;
+    workbook = new XSSFWorkbook();   // fresh workbook per scenario ✓
+    if (!isDBConnected) {
+        try {
+            /* String UAT_DB_Password = Security.decrypt(UAT_DB_PASSWORD);
+               UATDbSql = new DBSQL(UAT_DbURL, UAT_DB_USERNAME, UAT_DB_Password); */
 
-    String scenarioId = scenario.getUri() + ":" + scenario.getLine();
+            String Preprod_DB_Password = Security.decrypt(DBPassword);
+            preprodDbSql = new DBSQL(DbURL, DBUser, Preprod_DB_Password);
+            preprodConn = preprodDbSql.getConnection();
+            testScenario.log("PreProd connection is successfully connected.");
 
-    int count = executionCount.getOrDefault(scenarioId, 0) + 1;
-    executionCount.put(scenarioId, count);
+            String Prod_DB_Password = Security.decrypt(PROD_DB_PASSWORD);
+            prodDbSql = new DBSQL(PROD_DbURL, PROD_DB_USERNAME, Prod_DB_Password);
+            prodConn = prodDbSql.getConnection();
+            testScenario.log("Prod connection is successfully connected.");
 
-    lastSeenCount.put(scenarioId, count);
+            // uatConn = UATDbSql.getConnection();
+            isDBConnected = true;
+        } catch (SQLException e) {
+            throw new DBExceptions(e);
+        }
+    }
 }
 
-
+// ✅ Changed from @AfterAll (once) → @After (after EACH scenario)
+// ✅ Changed from static → instance method so testScenario is accessible
 @After
-public void afterScenario(Scenario scenario) {
+public void tearDown(Scenario scenario) {
+    // Write a separate Excel file for THIS scenario before closing connections
+    ExcelWriteClass.writeData(scenario.getName());
+    System.out.println("Hooks After Each Scenario Called");
 
-    String scenarioId = scenario.getUri() + ":" + scenario.getLine();
+    try {
+        preprodConn.close();
+        System.out.println("Preprod connection is closed");
+        scenario.log("Preprod connection is closed");
 
-    int executed = executionCount.get(scenarioId);
-    int latest = lastSeenCount.get(scenarioId);
+        prodConn.close();
+        System.out.println("Prod connection is closed");
+        scenario.log("Prod connection is closed");
 
-    // ✅ ONLY LAST EXECUTION OF THIS SCENARIO OUTLINE
-    if (executed == latest) {
-
-        ExcelWriteClass.writeData();   // ✅ write once
-
-        System.out.println("📊 Excel created for scenario: " + scenarioId);
-
-        // 🔥 reset workbook for next scenario
-        ExcelWriteClass.resetWorkbook();
-
-        executionCount.remove(scenarioId);
-        lastSeenCount.remove(scenarioId);
+        isDBConnected = false;
+    } catch (SQLException e) {
+        throw new RuntimeException(e);
     }
 }
 
 
-public static Workbook workbook = new XSSFWorkbook();
 
-public static void writeData() {
+public static void writeData(String scenarioName) {
+    Date now = new Date();
+    SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy_HH-mm-ss-SSS");
+    String timeDate = sdf.format(now);
 
-    FileOutputStream outputStream = null;
+    // Sanitize scenario name so it's safe to use in a filename
+    String safeName = scenarioName.replaceAll("[^a-zA-Z0-9_-]", "_");
 
-    try {
+    File file = new File(
+        System.getProperty("user.dir")
+        + "/src/test/resources/excelfiles/"
+        + "OracleTestResults_"
+        + safeName + "_"
+        + timeDate
+        + ".xlsx"
+    );
 
-        // ✅ Timestamp
-        Date now = new Date();
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy_HH-mm-ss");
-        String timeDate = sdf.format(now);
-
-        // ✅ File path
-        String filePath = System.getProperty("user.dir")
-                + "/src/test/resources/excelfiles/"
-                + "OracleTestResults_" + timeDate + ".xlsx";
-
-        File file = new File(filePath);
-
-        // ✅ Write workbook
-        outputStream = new FileOutputStream(file);
+    try (FileOutputStream outputStream = new FileOutputStream(file)) {
         workbook.write(outputStream);
-
-        System.out.println("✅ Excel written successfully: " + file.getAbsolutePath());
-
-    } catch (Exception e) {
+        System.out.println("Excel file written successfully: " + file.getName());
+    } catch (IOException e) {
         e.printStackTrace();
     } finally {
-
         try {
-            if (outputStream != null) {
-                outputStream.close();
-            }
-        } catch (Exception e) {
+            workbook.close();
+        } catch (IOException e) {
             e.printStackTrace();
         }
-
-        // 🔥 IMPORTANT → Reset workbook for next scenario
-        workbook = new XSSFWorkbook();
     }
 }
