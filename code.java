@@ -75,3 +75,6 @@ public static void finalWrite() {
     DBConnectionManager.close();
     System.out.println("🔒 DB Closed");
 }
+
+
+private static Map<String, String> scenarioTagMap = new HashMap<>();
