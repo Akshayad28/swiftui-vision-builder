@@ -1,62 +1,34 @@
-import io.cucumber.java.Before;
-import io.cucumber.java.After;
-import io.cucumber.java.Scenario;
+public static void writeData(String tagName) {
 
-import java.util.HashMap;
-import java.util.Map;
+    try {
 
-public class Hooks {
+        Date now = new Date();
+        SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy_HH-mm-ss");
+        String timeDate = sdf.format(now);
 
-    private static Map<String, Integer> executionCount = new HashMap<>();
-    private static Map<String, Integer> expectedCount = new HashMap<>();
-    private static Map<String, String> scenarioTagMap = new HashMap<>();
+        String basePath = System.getProperty("user.dir") + "/src/test/resources/excelfiles/";
 
-    @Before
-    public void beforeScenario(Scenario scenario) {
+        // ✅ Create folder using tag
+        File folder = new File(basePath + tagName);
 
-        String scenarioId = scenario.getUri() + ":" + scenario.getLine();
-
-        // Count executions
-        int count = executionCount.getOrDefault(scenarioId, 0) + 1;
-        executionCount.put(scenarioId, count);
-
-        // Expected count auto-adjust
-        expectedCount.put(scenarioId, count);
-
-        // Capture tag (ONLY ONCE)
-        if (!scenarioTagMap.containsKey(scenarioId)) {
-
-            String tagName = scenario.getSourceTagNames()
-                    .stream()
-                    .map(tag -> tag.replace("@", ""))
-                    .reduce((a, b) -> a + "_" + b) // multiple tags
-                    .orElse("DefaultTag");
-
-            scenarioTagMap.put(scenarioId, tagName);
+        if (!folder.exists()) {
+            folder.mkdirs();
         }
-    }
 
-    @After
-    public void afterScenario(Scenario scenario) {
+        // ✅ Create file inside that folder
+        File file = new File(folder + "/OracleTestResults_" + timeDate + ".xlsx");
 
-        String scenarioId = scenario.getUri() + ":" + scenario.getLine();
+        FileOutputStream outputStream = new FileOutputStream(file);
 
-        int executed = executionCount.get(scenarioId);
-        int expected = expectedCount.get(scenarioId);
+        workbook.write(outputStream);
+        outputStream.close();
 
-        // ✅ ONLY LAST ROW OF SCENARIO OUTLINE
-        if (executed == expected) {
+        System.out.println("✅ Excel written at: " + file.getAbsolutePath());
 
-            String tagName = scenarioTagMap.get(scenarioId);
+        // 🔥 RESET workbook for next scenario
+        workbook = new XSSFWorkbook();
 
-            ExcelWriteClass.writeData(tagName);
-
-            System.out.println("📊 Excel created for: " + tagName);
-
-            // Cleanup for next scenario
-            executionCount.remove(scenarioId);
-            expectedCount.remove(scenarioId);
-            scenarioTagMap.remove(scenarioId);
-        }
+    } catch (Exception e) {
+        e.printStackTrace();
     }
 }
