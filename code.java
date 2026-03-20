@@ -1,39 +1,27 @@
 public static void writeData() {
 
-    FileOutputStream outputStream = null;
+    FileOutputStream fos = null;
 
     try {
 
-        Date now = new Date();
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy_HH-mm-ss");
-        String timeDate = sdf.format(now);
-
-        // 👉 Use tag from Hooks
-        String tagName = Hooks.tagName;
-
-        if (tagName == null || tagName.isEmpty()) {
-            tagName = "default";
+        if (workbook == null) {
+            System.out.println("⚠ Workbook is null, nothing to write");
+            return;
         }
 
-        String fileName = "OracleTestResults_" + timeDate + "_" + tagName + ".xlsx";
+        fos = new FileOutputStream(file);
 
-        File file = new File(
-                System.getProperty("user.dir")
-                        + "/src/test/resources/excelfiles/"
-                        + fileName
-        );
+        // 👉 This writes EXISTING workbook (no reset)
+        workbook.write(fos);
 
-        outputStream = new FileOutputStream(file);
-        workbook.write(outputStream);
+        System.out.println("📁 Excel file written successfully: " + file.getAbsolutePath());
 
-        System.out.println("✅ Excel file written: " + file.getAbsolutePath());
-
-    } catch (IOException e) {
+    } catch (Exception e) {
         e.printStackTrace();
     } finally {
         try {
-            if (outputStream != null) outputStream.close();
-        } catch (IOException e) {
+            if (fos != null) fos.close();
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
