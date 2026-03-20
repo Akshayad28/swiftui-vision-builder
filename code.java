@@ -1,50 +1,56 @@
 public static void writeData(String tagName) {
 
-    Date now = new Date();
-    SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy_HH-mm-ss");
-    String timeDate = sdf.format(now);
-
     FileOutputStream outputStream = null;
 
     try {
 
-        String basePath = System.getProperty("user.dir") + "/src/test/resources/excelfiles/";
+        // 👉 Generate timestamp
+        Date now = new Date();
+        SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy_HH-mm-ss");
+        String timeDate = sdf.format(now);
 
-        // ✅ Default fallback
-        if (tagName == null || tagName.isEmpty()) {
+        // 👉 Default tag
+        if (tagName == null || tagName.trim().isEmpty()) {
             tagName = "DefaultTag";
         }
 
+        // 👉 Clean tag name
         tagName = tagName.replaceAll("[\\\\/:*?\"<>|]", "_");
 
-        // ✅ Create folder using TAG
+        // 👉 Base path
+        String basePath = System.getProperty("user.dir")
+                + "/src/test/resources/excelfiles/";
+
+        // 👉 Create tag folder
         File tagFolder = new File(basePath + tagName);
 
         if (!tagFolder.exists()) {
             tagFolder.mkdirs();
         }
 
-        // ✅ Create Excel inside tag folder
+        // 👉 Create file INSIDE tag folder
         File file = new File(
                 tagFolder + "/OracleTestResults_" + timeDate + ".xlsx"
         );
 
+        // 👉 Write workbook (same as before)
         outputStream = new FileOutputStream(file);
-
         workbook.write(outputStream);
 
-        System.out.println("✅ Excel written at: " + file.getAbsolutePath());
+        System.out.println("✅ Excel file written at: " + file.getAbsolutePath());
 
-    } catch (Exception e) {
+    } catch (IOException e) {
         e.printStackTrace();
     } finally {
+
         try {
-            if (outputStream != null) outputStream.close();
-        } catch (Exception e) {
+            if (outputStream != null) {
+                outputStream.close();
+            }
+        } catch (IOException e) {
             e.printStackTrace();
         }
-    }
 
-    // ✅ Reset workbook (since per scenario file)
-    workbook = new XSSFWorkbook();
+        // ❗ DO NOT close workbook
+    }
 }
