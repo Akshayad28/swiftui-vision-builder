@@ -1,56 +1,16 @@
-public static void writeData(String tagName) {
+private static Set<String> executed = new HashSet<>();
 
-    FileOutputStream outputStream = null;
+@After
+public void afterScenario(Scenario scenario) {
 
-    try {
+    String scenarioId = scenario.getUri() + ":" + scenario.getLine();
 
-        // 👉 Generate timestamp
-        Date now = new Date();
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy_HH-mm-ss");
-        String timeDate = sdf.format(now);
+    if (!executed.contains(scenarioId)) {
 
-        // 👉 Default tag
-        if (tagName == null || tagName.trim().isEmpty()) {
-            tagName = "DefaultTag";
-        }
+        ExcelWriteClass.writeData(tagName);
 
-        // 👉 Clean tag name
-        tagName = tagName.replaceAll("[\\\\/:*?\"<>|]", "_");
+        executed.add(scenarioId);
 
-        // 👉 Base path
-        String basePath = System.getProperty("user.dir")
-                + "/src/test/resources/excelfiles/";
-
-        // 👉 Create tag folder
-        File tagFolder = new File(basePath + tagName);
-
-        if (!tagFolder.exists()) {
-            tagFolder.mkdirs();
-        }
-
-        // 👉 Create file INSIDE tag folder
-        File file = new File(
-                tagFolder + "/OracleTestResults_" + timeDate + ".xlsx"
-        );
-
-        // 👉 Write workbook (same as before)
-        outputStream = new FileOutputStream(file);
-        workbook.write(outputStream);
-
-        System.out.println("✅ Excel file written at: " + file.getAbsolutePath());
-
-    } catch (IOException e) {
-        e.printStackTrace();
-    } finally {
-
-        try {
-            if (outputStream != null) {
-                outputStream.close();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        // ❗ DO NOT close workbook
+        System.out.println("📊 Excel created ONCE for scenario outline");
     }
 }
