@@ -1,17 +1,11 @@
-import io.cucumber.java.Before;
-import io.cucumber.java.Scenario;
+// ✅ Capture tag (take first tag OR all tags)
+        tagName = testScenario.getSourceTagNames()
+                .stream()
+                .map(tag -> tag.replace("@", ""))   // remove @
+                .reduce((a, b) -> a + "_" + b)      // join if multiple
+                .orElse("DefaultTag");
 
-public class Hooks {
+        // ✅ Clean invalid characters
+        tagName = tagName.replaceAll("[\\\\/:*?\"<>|]", "_");
 
-    public static String scenarioName = "DefaultScenario";
-
-    @Before
-    public void captureScenario(Scenario testScenario) {
-
-        scenarioName = testScenario.getName()
-                .replaceAll("[\\\\/:*?\"<>|]", "_") // clean invalid chars
-                .trim();
-
-        System.out.println("📌 Captured Scenario: " + scenarioName);
-    }
-}
+        System.out.println("📌 Captured Tag: " + tagName);
