@@ -1,37 +1,69 @@
-  public static void writeData(String outlineName) {
-        if (workbook == null) {
-            System.out.println("Workbook is null, skipping write for : " + outlineName);
-            return;
+@Then("The count should be same for preprod and prod {string}")
+public boolean compareCount(String monitor) throws FileNotFoundException {
+
+    // ✅ Headers
+    List<String> headers = new ArrayList<>();
+    headers.add("ProdMonitorCount");
+    headers.add("PreprodMonitorCount");
+    headers.add("Monitor");
+    headers.add("Match_Status");
+    headers.add("Difference_Percentage");
+
+    boolean status_flag;
+    double percentage = 0.0;
+
+    // ✅ ZERO HANDLING
+    if (preprodMonitorCount == 0 || prodMonitorCount == 0) {
+
+        if (preprodMonitorCount == 0 && prodMonitorCount == 0) {
+            status_flag = true;
+            System.out.println("Both values are 0 for monitor: " + monitor);
+            testScenario.log("Both values are 0 for monitor: " + monitor);
+        } else {
+            status_flag = false;
+            System.out.println("One of the values is 0 for monitor: " + monitor);
+            testScenario.log("One of the values is 0 for monitor: " + monitor);
         }
 
-        if (outlineName == null || outlineName.trim().isEmpty()) {
-            outlineName = "UnknownScenario";
-        }
+    } else {
 
-        Date now = new Date();
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy_HH-mm-ss");
-        String timeDate = sdf.format(now);
-        String safeName = outlineName.replaceAll("[^a-zA-Z0-9_-]", "_");
+        // ✅ YOUR FORMULA (PREPROD BASE)
+        percentage = ((double)(prodMonitorCount - preprodMonitorCount) / preprodMonitorCount) * 100;
 
-        File file = new File(
-            System.getProperty("user.dir")
-            + "/src/test/resources/excelfiles/"
-            + "OracleTestResults_"
-            + safeName + "_"
-            + timeDate
-            + ".xlsx"
-        );
+        // ✅ Make absolute
+        percentage = Math.abs(percentage);
 
-        try (FileOutputStream outputStream = new FileOutputStream(file)) {
-            workbook.write(outputStream);
-            System.out.println("Excel file written : " + file.getName());
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                workbook.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        // ✅ Optional rounding
+        percentage = Math.round(percentage * 100.0) / 100.0;
+
+        if (percentage <= 2) {
+            status_flag = true;
+            System.out.println("Count within 2% tolerance for monitor: " + monitor + " | Diff% = " + percentage);
+            testScenario.log("PASS: Within 2% tolerance for monitor: " + monitor + " | Diff% = " + percentage);
+        } else {
+            status_flag = false;
+            System.out.println("Count exceeds 2% tolerance for monitor: " + monitor + " | Diff% = " + percentage);
+            testScenario.log("FAIL: Exceeds 2% tolerance for monitor: " + monitor + " | Diff% = " + percentage);
         }
     }
+
+    // ✅ Prepare Excel Data
+    List<String> data = new ArrayList<>();
+    data.add(String.valueOf(prodMonitorCount));
+    data.add(String.valueOf(preprodMonitorCount));
+    data.add(monitor);
+    data.add(String.valueOf(status_flag));
+    data.add(String.valueOf(percentage));
+
+    // ✅ Write to Excel
+    excelWriter.writeExcel(
+            "Monitor_Level_Checks",
+            headers,
+            Collections.singletonList(data)
+    );
+
+    // ✅ Assertion
+    Assert.assertTrue(status_flag, "Validation failed for monitor: " + monitor);
+
+    return status_flag;
+}
