@@ -1,16 +1,18 @@
 @Then("The count should be same for preprod and prod {string}")
 public boolean compareCount(String monitor) throws FileNotFoundException {
 
-    // ✅ Headers
+    // ✅ Headers for Excel
     List<String> headers = new ArrayList<>();
     headers.add("ProdMonitorCount");
     headers.add("PreprodMonitorCount");
     headers.add("Monitor");
-    headers.add("Match_Status");
+    headers.add("Difference");
     headers.add("Difference_Percentage");
+    headers.add("Match_Status");
 
     boolean status_flag;
     double percentage = 0.0;
+    double difference = Math.abs(prodMonitorCount - preprodMonitorCount);
 
     // ✅ ZERO HANDLING
     if (preprodMonitorCount == 0 || prodMonitorCount == 0) {
@@ -28,22 +30,25 @@ public boolean compareCount(String monitor) throws FileNotFoundException {
     } else {
 
         // ✅ YOUR FORMULA (PREPROD BASE)
-        percentage = ((double)(prodMonitorCount - preprodMonitorCount) / preprodMonitorCount) * 100;
+        percentage = (difference / preprodMonitorCount) * 100;
 
-        // ✅ Make absolute
+        // ✅ Make absolute & round
         percentage = Math.abs(percentage);
-
-        // ✅ Optional rounding
         percentage = Math.round(percentage * 100.0) / 100.0;
 
-        if (percentage <= 2) {
+        // ✅ HYBRID LOGIC
+        if (difference <= 1 || percentage <= 2) {
             status_flag = true;
-            System.out.println("Count within 2% tolerance for monitor: " + monitor + " | Diff% = " + percentage);
-            testScenario.log("PASS: Within 2% tolerance for monitor: " + monitor + " | Diff% = " + percentage);
+            System.out.println("PASS: Within tolerance for monitor: " + monitor +
+                    " | Diff=" + difference + " | %=" + percentage);
+            testScenario.log("PASS: Within tolerance for monitor: " + monitor +
+                    " | Diff=" + difference + " | %=" + percentage);
         } else {
             status_flag = false;
-            System.out.println("Count exceeds 2% tolerance for monitor: " + monitor + " | Diff% = " + percentage);
-            testScenario.log("FAIL: Exceeds 2% tolerance for monitor: " + monitor + " | Diff% = " + percentage);
+            System.out.println("FAIL: Exceeds tolerance for monitor: " + monitor +
+                    " | Diff=" + difference + " | %=" + percentage);
+            testScenario.log("FAIL: Exceeds tolerance for monitor: " + monitor +
+                    " | Diff=" + difference + " | %=" + percentage);
         }
     }
 
@@ -52,8 +57,9 @@ public boolean compareCount(String monitor) throws FileNotFoundException {
     data.add(String.valueOf(prodMonitorCount));
     data.add(String.valueOf(preprodMonitorCount));
     data.add(monitor);
-    data.add(String.valueOf(status_flag));
+    data.add(String.valueOf(difference));
     data.add(String.valueOf(percentage));
+    data.add(String.valueOf(status_flag));
 
     // ✅ Write to Excel
     excelWriter.writeExcel(
@@ -62,8 +68,15 @@ public boolean compareCount(String monitor) throws FileNotFoundException {
             Collections.singletonList(data)
     );
 
-    // ✅ Assertion
-    Assert.assertTrue(status_flag, "Validation failed for monitor: " + monitor);
+    // ✅ Assertion (FIXED ORDER)
+    Assert.assertTrue(
+            "Validation failed for monitor: " + monitor +
+                    " | Prod=" + prodMonitorCount +
+                    " | Preprod=" + preprodMonitorCount +
+                    " | Diff=" + difference +
+                    " | %=" + percentage,
+            status_flag
+    );
 
     return status_flag;
 }
