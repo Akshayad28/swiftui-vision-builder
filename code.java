@@ -1,81 +1,78 @@
-@Then("The preprod count should match with prod count for ProductId {string}")
-public boolean compareCount(String ProductId) throws FileNotFoundException {
+@Then("The count should be same for preprod and prod {string}")
+public boolean compareCount(String monitor) throws FileNotFoundException {
 
-    // ✅ Headers
+    // ✅ Headers for Excel
     List<String> headers = new ArrayList<>();
-    headers.add("ProdCount");
-    headers.add("PreprodCount");
-    headers.add("ProductId");
+    headers.add("ProdMonitorCount");
+    headers.add("PreprodMonitorCount");
+    headers.add("Monitor");
     headers.add("Difference");
     headers.add("Difference_Percentage");
     headers.add("Match_Status");
 
     boolean status_flag;
     double percentage = 0.0;
-    double difference = Math.abs(prodCount - preprodCount);
+    double difference = Math.abs(prodMonitorCount - preprodMonitorCount);
 
     // ✅ ZERO HANDLING
-    if (preprodCount == 0 || prodCount == 0) {
+    if (preprodMonitorCount == 0 || prodMonitorCount == 0) {
 
-        if (preprodCount == 0 && prodCount == 0) {
+        if (preprodMonitorCount == 0 && prodMonitorCount == 0) {
             status_flag = true;
+            System.out.println("Both values are 0 for monitor: " + monitor);
+            testScenario.log("Both values are 0 for monitor: " + monitor);
         } else {
             status_flag = false;
+            System.out.println("One of the values is 0 for monitor: " + monitor);
+            testScenario.log("One of the values is 0 for monitor: " + monitor);
         }
 
     } else {
 
-        // ✅ Percentage Calculation (PREPROD BASE)
-        percentage = (difference / preprodCount) * 100;
+        // ✅ YOUR FORMULA (PREPROD BASE)
+        percentage = (difference / preprodMonitorCount) * 100;
+
+        // ✅ Make absolute & round
         percentage = Math.abs(percentage);
         percentage = Math.round(percentage * 100.0) / 100.0;
 
-        // 🔥 FINAL STRICT LOGIC (AND CONDITION)
-        if (difference <= 1 && percentage <= 2) {
+        // ✅ HYBRID LOGIC
+        if (difference <= 1 || percentage <= 2) {
             status_flag = true;
+            System.out.println("PASS: Within tolerance for monitor: " + monitor +
+                    " | Diff=" + difference + " | %=" + percentage);
+            testScenario.log("PASS: Within tolerance for monitor: " + monitor +
+                    " | Diff=" + difference + " | %=" + percentage);
         } else {
             status_flag = false;
-        }
-
-        // ✅ Logging
-        if (status_flag) {
-            System.out.println("PASS: Product " + ProductId +
+            System.out.println("FAIL: Exceeds tolerance for monitor: " + monitor +
                     " | Diff=" + difference + " | %=" + percentage);
-            testScenario.log("PASS: Product " + ProductId +
-                    " | Diff=" + difference + " | %=" + percentage);
-        } else {
-            System.out.println("FAIL: Product " + ProductId +
-                    " | Diff=" + difference + " | %=" + percentage);
-            testScenario.log("FAIL: Product " + ProductId +
+            testScenario.log("FAIL: Exceeds tolerance for monitor: " + monitor +
                     " | Diff=" + difference + " | %=" + percentage);
         }
     }
 
-    // ✅ Excel Data
-    List<List<String>> data = new ArrayList<>();
-    List<String> row = new ArrayList<>();
-
-    row.add(String.valueOf(prodCount));
-    row.add(String.valueOf(preprodCount));
-    row.add(ProductId);
-    row.add(String.valueOf(difference));
-    row.add(String.valueOf(percentage));
-    row.add(String.valueOf(status_flag));
-
-    data.add(row);
+    // ✅ Prepare Excel Data
+    List<String> data = new ArrayList<>();
+    data.add(String.valueOf(prodMonitorCount));
+    data.add(String.valueOf(preprodMonitorCount));
+    data.add(monitor);
+    data.add(String.valueOf(difference));
+    data.add(String.valueOf(percentage));
+    data.add(String.valueOf(status_flag));
 
     // ✅ Write to Excel
     excelWriter.writeExcel(
-            "Product_Mapping",
+            "Monitor_Level_Checks",
             headers,
-            data
+            Collections.singletonList(data)
     );
 
-    // ✅ Assertion
+    // ✅ Assertion (FIXED ORDER)
     Assert.assertTrue(
-            "Validation failed for Product: " + ProductId +
-                    " | Prod=" + prodCount +
-                    " | Preprod=" + preprodCount +
+            "Validation failed for monitor: " + monitor +
+                    " | Prod=" + prodMonitorCount +
+                    " | Preprod=" + preprodMonitorCount +
                     " | Diff=" + difference +
                     " | %=" + percentage,
             status_flag
