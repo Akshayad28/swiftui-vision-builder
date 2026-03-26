@@ -14,6 +14,11 @@ public boolean compareCount(String ProductId) throws FileNotFoundException {
     double percentage = 0.0;
     double difference = Math.abs(prodCount - preprodCount);
 
+    // 🔧 Thresholds (can be made configurable later)
+    int SMALL_DIFF = 1;
+    int MAX_DIFF = 5;
+    double MAX_PERCENT = 2.0;
+
     // ✅ ZERO HANDLING
     if (preprodCount == 0 || prodCount == 0) {
 
@@ -29,30 +34,37 @@ public boolean compareCount(String ProductId) throws FileNotFoundException {
 
     } else {
 
-        // ✅ PERCENTAGE CALCULATION (PREPROD BASE)
+        // ✅ Percentage Calculation (PREPROD base)
         percentage = (difference / preprodCount) * 100;
-
-        // ✅ absolute + rounding
         percentage = Math.abs(percentage);
         percentage = Math.round(percentage * 100.0) / 100.0;
 
-        // ✅ HYBRID LOGIC
-        if (difference <= 1 || percentage <= 2) {
+        // ✅ FINAL CORRECT LOGIC
+        if (difference <= SMALL_DIFF) {
             status_flag = true;
-            System.out.println("PASS: Within tolerance for Product: " + ProductId +
+        }
+        else if (difference <= MAX_DIFF && percentage <= MAX_PERCENT) {
+            status_flag = true;
+        }
+        else {
+            status_flag = false;
+        }
+
+        // ✅ Logging
+        if (status_flag) {
+            System.out.println("PASS: Product " + ProductId +
                     " | Diff=" + difference + " | %=" + percentage);
-            testScenario.log("PASS: Within tolerance for Product: " + ProductId +
+            testScenario.log("PASS: Product " + ProductId +
                     " | Diff=" + difference + " | %=" + percentage);
         } else {
-            status_flag = false;
-            System.out.println("FAIL: Exceeds tolerance for Product: " + ProductId +
+            System.out.println("FAIL: Product " + ProductId +
                     " | Diff=" + difference + " | %=" + percentage);
-            testScenario.log("FAIL: Exceeds tolerance for Product: " + ProductId +
+            testScenario.log("FAIL: Product " + ProductId +
                     " | Diff=" + difference + " | %=" + percentage);
         }
     }
 
-    // ✅ Prepare Excel Data
+    // ✅ Excel Data
     List<List<String>> data = new ArrayList<>();
     List<String> row = new ArrayList<>();
 
@@ -65,14 +77,14 @@ public boolean compareCount(String ProductId) throws FileNotFoundException {
 
     data.add(row);
 
-    // ✅ Write Excel
+    // ✅ Write to Excel
     excelWriter.writeExcel(
             "Product_Mapping",
             headers,
             data
     );
 
-    // ✅ Assertion (FIXED)
+    // ✅ Assertion
     Assert.assertTrue(
             "Validation failed for Product: " + ProductId +
                     " | Prod=" + prodCount +
