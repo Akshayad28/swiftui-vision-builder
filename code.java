@@ -1,7 +1,6 @@
 @Then("The count should be same for preprod and prod {string}")
 public boolean compareCount(String monitor) throws FileNotFoundException {
 
-    // ✅ Headers
     List<String> headers = new ArrayList<>();
     headers.add("ProdMonitorCount");
     headers.add("PreprodMonitorCount");
@@ -14,57 +13,40 @@ public boolean compareCount(String monitor) throws FileNotFoundException {
     double percentage = 0.0;
     double difference = Math.abs(prodMonitorCount - preprodMonitorCount);
 
-    // 🔧 Thresholds
-    int SMALL_DIFF = 1;
-    int MAX_DIFF = 5;
-    double MAX_PERCENT = 2.0;
-
     // ✅ ZERO HANDLING
     if (preprodMonitorCount == 0 || prodMonitorCount == 0) {
 
         if (preprodMonitorCount == 0 && prodMonitorCount == 0) {
             status_flag = true;
-            System.out.println("Both values are 0 for monitor: " + monitor);
-            testScenario.log("Both values are 0 for monitor: " + monitor);
         } else {
             status_flag = false;
-            System.out.println("One of the values is 0 for monitor: " + monitor);
-            testScenario.log("One of the values is 0 for monitor: " + monitor);
         }
 
     } else {
 
-        // ✅ Percentage Calculation (PREPROD base)
+        // ✅ Percentage Calculation
         percentage = (difference / preprodMonitorCount) * 100;
         percentage = Math.abs(percentage);
         percentage = Math.round(percentage * 100.0) / 100.0;
 
-        // ✅ FINAL FIXED LOGIC
-        if (difference <= SMALL_DIFF) {
+        // 🔥 FINAL STRICT LOGIC (AND CONDITION)
+        if (difference <= 1 && percentage <= 2) {
             status_flag = true;
-        }
-        else if (difference <= MAX_DIFF && percentage <= MAX_PERCENT) {
-            status_flag = true;
-        }
-        else {
+        } else {
             status_flag = false;
         }
 
-        // ✅ Logging
+        // Logging
         if (status_flag) {
             System.out.println("PASS: Monitor " + monitor +
-                    " | Diff=" + difference + " | %=" + percentage);
-            testScenario.log("PASS: Monitor " + monitor +
                     " | Diff=" + difference + " | %=" + percentage);
         } else {
             System.out.println("FAIL: Monitor " + monitor +
                     " | Diff=" + difference + " | %=" + percentage);
-            testScenario.log("FAIL: Monitor " + monitor +
-                    " | Diff=" + difference + " | %=" + percentage);
         }
     }
 
-    // ✅ Excel Data
+    // Excel data
     List<String> data = new ArrayList<>();
     data.add(String.valueOf(prodMonitorCount));
     data.add(String.valueOf(preprodMonitorCount));
@@ -79,7 +61,7 @@ public boolean compareCount(String monitor) throws FileNotFoundException {
             Collections.singletonList(data)
     );
 
-    // ✅ Assertion
+    // Assertion
     Assert.assertTrue(
             "Validation failed for monitor: " + monitor +
                     " | Prod=" + prodMonitorCount +
