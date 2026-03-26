@@ -1,22 +1,23 @@
-@Then("The count should be same for preprod and prod {string}")
-public boolean compareCount(String monitor) throws FileNotFoundException {
+@Then("The preprod count should match with prod count for ProductId {string}")
+public boolean compareCount(String ProductId) throws FileNotFoundException {
 
+    // ✅ Headers
     List<String> headers = new ArrayList<>();
-    headers.add("ProdMonitorCount");
-    headers.add("PreprodMonitorCount");
-    headers.add("Monitor");
+    headers.add("ProdCount");
+    headers.add("PreprodCount");
+    headers.add("ProductId");
     headers.add("Difference");
     headers.add("Difference_Percentage");
     headers.add("Match_Status");
 
     boolean status_flag;
     double percentage = 0.0;
-    double difference = Math.abs(prodMonitorCount - preprodMonitorCount);
+    double difference = Math.abs(prodCount - preprodCount);
 
     // ✅ ZERO HANDLING
-    if (preprodMonitorCount == 0 || prodMonitorCount == 0) {
+    if (preprodCount == 0 || prodCount == 0) {
 
-        if (preprodMonitorCount == 0 && prodMonitorCount == 0) {
+        if (preprodCount == 0 && prodCount == 0) {
             status_flag = true;
         } else {
             status_flag = false;
@@ -24,8 +25,8 @@ public boolean compareCount(String monitor) throws FileNotFoundException {
 
     } else {
 
-        // ✅ Percentage Calculation
-        percentage = (difference / preprodMonitorCount) * 100;
+        // ✅ Percentage Calculation (PREPROD BASE)
+        percentage = (difference / preprodCount) * 100;
         percentage = Math.abs(percentage);
         percentage = Math.round(percentage * 100.0) / 100.0;
 
@@ -36,36 +37,45 @@ public boolean compareCount(String monitor) throws FileNotFoundException {
             status_flag = false;
         }
 
-        // Logging
+        // ✅ Logging
         if (status_flag) {
-            System.out.println("PASS: Monitor " + monitor +
+            System.out.println("PASS: Product " + ProductId +
+                    " | Diff=" + difference + " | %=" + percentage);
+            testScenario.log("PASS: Product " + ProductId +
                     " | Diff=" + difference + " | %=" + percentage);
         } else {
-            System.out.println("FAIL: Monitor " + monitor +
+            System.out.println("FAIL: Product " + ProductId +
+                    " | Diff=" + difference + " | %=" + percentage);
+            testScenario.log("FAIL: Product " + ProductId +
                     " | Diff=" + difference + " | %=" + percentage);
         }
     }
 
-    // Excel data
-    List<String> data = new ArrayList<>();
-    data.add(String.valueOf(prodMonitorCount));
-    data.add(String.valueOf(preprodMonitorCount));
-    data.add(monitor);
-    data.add(String.valueOf(difference));
-    data.add(String.valueOf(percentage));
-    data.add(String.valueOf(status_flag));
+    // ✅ Excel Data
+    List<List<String>> data = new ArrayList<>();
+    List<String> row = new ArrayList<>();
 
+    row.add(String.valueOf(prodCount));
+    row.add(String.valueOf(preprodCount));
+    row.add(ProductId);
+    row.add(String.valueOf(difference));
+    row.add(String.valueOf(percentage));
+    row.add(String.valueOf(status_flag));
+
+    data.add(row);
+
+    // ✅ Write to Excel
     excelWriter.writeExcel(
-            "Monitor_Level_Checks",
+            "Product_Mapping",
             headers,
-            Collections.singletonList(data)
+            data
     );
 
-    // Assertion
+    // ✅ Assertion
     Assert.assertTrue(
-            "Validation failed for monitor: " + monitor +
-                    " | Prod=" + prodMonitorCount +
-                    " | Preprod=" + preprodMonitorCount +
+            "Validation failed for Product: " + ProductId +
+                    " | Prod=" + prodCount +
+                    " | Preprod=" + preprodCount +
                     " | Diff=" + difference +
                     " | %=" + percentage,
             status_flag
