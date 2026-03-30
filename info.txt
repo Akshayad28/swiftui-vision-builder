@@ -1,32 +1,13 @@
-Here’s a well-structured and professional version of **Operational Requirements** and **Technology Requirements** aligned with your JIRA description and the work you performed:
+Hi All,
 
----
+I have been working on JIRA LH-11096 for the past week. Initially, there was no test data in preprod, so with your help we inserted data as per requirements. After correcting earlier issues (effective date and data setup) and re-inserting post batch runs, the data is still not as expected.
 
-### **Operational Requirements:**
+Current Issues:
+- No Form 8.3 generated for Non-Connected status  
+- Only Form 8.5 is generated  
+- Section 3(b) in Form 8.5 is empty  
 
-* Automation scripts must increase overall test coverage while reducing manual effort.
-* All automated test cases should be executable through the framework without manual intervention.
-* Input test data must be dynamically read from external sources (Excel), ensuring flexibility and reusability.
-* Output results should be generated in a structured Excel format without overwriting previous executions.
-* Test cases must validate data consistency between environments (PreProd vs Prod) and log comparison results clearly (including `MATCH_STATUS`).
-* Database connections must be properly opened and closed to avoid unnecessary load or connection leakage.
-* Automated test cases should pass consistently; any failure must be due to valid functional issues, not script instability.
-* Code should be modular, reusable, and easy to maintain for future enhancements.
+Could you please help identify the issue so we can proceed with testing and close the JIRA at the earliest?
 
----
-
-### **Technology Requirements:**
-
-* Automation framework should follow **clean code principles** (readability, maintainability, modular design).
-* No hardcoded values; all configurable data (inputs, environment details, queries) should be externalized.
-* Use **Excel-based data handling** for both input and output operations.
-* Implement **database integration** for executing queries and validating data across environments.
-* Ensure proper **DB connection handling** (open/close) to optimize performance.
-* Use **relative locators** instead of absolute locators for UI elements (if applicable), ensuring scripts are stable across different screen resolutions.
-* Locators and logic must be **parameter-independent** and reusable.
-* Framework should support **scalability** to easily add new test cases and validations.
-* Maintain **robust error handling and logging mechanisms** for debugging and traceability.
-
----
-
-If you want, I can convert this into a **crisp JIRA-friendly format (short bullet points)** or **make it more managerial/impact-focused**.
+Thanks,  
+Akshay
