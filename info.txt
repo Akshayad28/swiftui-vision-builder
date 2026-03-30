@@ -1,13 +1,15 @@
 Hi All,
 
-I have been working on JIRA LH-11096 for the past week. Initially, there was no test data in preprod, so with your help we inserted data as per requirements. After correcting earlier issues (effective date and data setup) and re-inserting post batch runs, the data is still not as expected.
+I have been working on JIRA LH-11096 for the past week. Initially, there was no test data available in preprod, so with your help we inserted data as per the JIRA requirements. In the first attempt, due to an incorrect effective date, the data was not reflected correctly.  
+
+After the next batch, we re-inserted the data, but the expected results for Forms 8.3 and 8.5 were still not achieved. We then checked with the Ops engineer, identified the issue in the data setup, corrected it, and again inserted the data post batch with all the required details.
 
 Current Issues:
-- No Form 8.3 generated for Non-Connected status  
-- Only Form 8.5 is generated  
-- Section 3(b) in Form 8.5 is empty  
+- Form 8.3 is not getting generated for Non-Connected status  
+- Only Form 8.5 is being generated  
+- Section 3(b) in Form 8.5 is coming empty  
 
-Could you please help identify the issue so we can proceed with testing and close the JIRA at the earliest?
+Could you please help in identifying the issue so we can proceed with testing and close the JIRA at the earliest?
 
 Thanks,  
 Akshay
