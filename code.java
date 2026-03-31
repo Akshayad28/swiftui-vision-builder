@@ -1,82 +1,75 @@
-@Then("The count should be same for preprod and prod {string}")
-public boolean compareCount(String monitor) throws FileNotFoundException {
+public class ExceptionValidationSteps {
 
-    // ✅ Headers for Excel
-    List<String> headers = new ArrayList<>();
-    headers.add("ProdMonitorCount");
-    headers.add("PreprodMonitorCount");
-    headers.add("Monitor");
-    headers.add("Difference");
-    headers.add("Difference_Percentage");
-    headers.add("Match_Status");
+    DBUtils dbUtils = new DBUtils();
+    RuleEngine ruleEngine = new RuleEngine();
 
-    boolean status_flag;
-    double percentage = 0.0;
-    double difference = Math.abs(prodMonitorCount - preprodMonitorCount);
+    List<Map<String, Object>> exceptionRecords;
+    List<Boolean> results = new ArrayList<>();
 
-    // ✅ ZERO HANDLING
-    if (preprodMonitorCount == 0 || prodMonitorCount == 0) {
+    @Given("I fetch exception records from database")
+    public void fetchExceptionRecords() {
 
-        if (preprodMonitorCount == 0 && prodMonitorCount == 0) {
-            status_flag = true;
-            System.out.println("Both values are 0 for monitor: " + monitor);
-            testScenario.log("Both values are 0 for monitor: " + monitor);
-        } else {
-            status_flag = false;
-            System.out.println("One of the values is 0 for monitor: " + monitor);
-            testScenario.log("One of the values is 0 for monitor: " + monitor);
-        }
+        String query = "SELECT file_id, landing_rec_id, monitor_id, CASUAL_ATTRIBUTES FROM exception_table";
 
-    } else {
+        exceptionRecords = dbUtils.executeQuery(query);
 
-        // ✅ YOUR FORMULA (PREPROD BASE)
-        percentage = (difference / preprodMonitorCount) * 100;
+        System.out.println("Total Records: " + exceptionRecords.size());
+    }
 
-        // ✅ Make absolute & round
-        percentage = Math.abs(percentage);
-        percentage = Math.round(percentage * 100.0) / 100.0;
+    @When("I validate each record using dynamic rule engine")
+    public void validateRecords() {
 
-        // ✅ HYBRID LOGIC
-        if (difference <= 1 || percentage <= 2) {
-            status_flag = true;
-            System.out.println("PASS: Within tolerance for monitor: " + monitor +
-                    " | Diff=" + difference + " | %=" + percentage);
-            testScenario.log("PASS: Within tolerance for monitor: " + monitor +
-                    " | Diff=" + difference + " | %=" + percentage);
-        } else {
-            status_flag = false;
-            System.out.println("FAIL: Exceeds tolerance for monitor: " + monitor +
-                    " | Diff=" + difference + " | %=" + percentage);
-            testScenario.log("FAIL: Exceeds tolerance for monitor: " + monitor +
-                    " | Diff=" + difference + " | %=" + percentage);
+        for (Map<String, Object> record : exceptionRecords) {
+
+            String fileId = record.get("file_id").toString();
+            String landingId = record.get("landing_rec_id").toString();
+            int monitorId = Integer.parseInt(record.get("monitor_id").toString());
+            String attribute = record.get("CASUAL_ATTRIBUTES").toString();
+
+            String monitor = (monitorId == 2) ? "HK_LONG" : "UK_LONG";
+
+            // 🔹 Load rules
+            List<Rule> rules = ruleEngine.loadRules(monitor);
+
+            // 🔹 Find rule
+            Rule rule = ruleEngine.findMatchingRule(attribute, rules);
+
+            // 🔹 Fetch DB record
+            Map<String, Object> dbRecord =
+                    dbUtils.getLhoneRecord(fileId, landingId);
+
+            // 🔹 Column NULL validation
+            Object columnValue = dbRecord.get(attribute);
+
+            // 🔹 Rule validation
+            boolean ruleResult =
+                    ruleEngine.evaluateException(rule, dbRecord);
+
+            boolean finalStatus = (columnValue == null && ruleResult);
+
+            log(record, rule, columnValue, finalStatus);
+
+            results.add(finalStatus);
         }
     }
 
-    // ✅ Prepare Excel Data
-    List<String> data = new ArrayList<>();
-    data.add(String.valueOf(prodMonitorCount));
-    data.add(String.valueOf(preprodMonitorCount));
-    data.add(monitor);
-    data.add(String.valueOf(difference));
-    data.add(String.valueOf(percentage));
-    data.add(String.valueOf(status_flag));
+    @Then("all exception records should be valid")
+    public void validateFinal() {
 
-    // ✅ Write to Excel
-    excelWriter.writeExcel(
-            "Monitor_Level_Checks",
-            headers,
-            Collections.singletonList(data)
-    );
+        for (Boolean r : results) {
+            Assert.assertTrue("Validation failed", r);
+        }
+    }
 
-    // ✅ Assertion (FIXED ORDER)
-    Assert.assertTrue(
-            "Validation failed for monitor: " + monitor +
-                    " | Prod=" + prodMonitorCount +
-                    " | Preprod=" + preprodMonitorCount +
-                    " | Diff=" + difference +
-                    " | %=" + percentage,
-            status_flag
-    );
+    private void log(Map<String, Object> record, Rule rule,
+                     Object columnValue, boolean status) {
 
-    return status_flag;
+        System.out.println("=================================");
+        System.out.println("File: " + record.get("file_id"));
+        System.out.println("Landing: " + record.get("landing_rec_id"));
+        System.out.println("Attribute: " + record.get("CASUAL_ATTRIBUTES"));
+        System.out.println("Rule: " + rule.getRuleId());
+        System.out.println("Column Value: " + columnValue);
+        System.out.println("Final Status: " + status);
+    }
 }
