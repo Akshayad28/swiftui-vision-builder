@@ -13,3 +13,24 @@
 4. Store result (logs / excel)
 5. Assert all passed
 6. End Scenario
+
+
+Feature: Exception Validation using Dynamic Rules
+
+  Scenario: Validate exception records
+
+    Given I fetch exception records from database
+    When I validate each record using dynamic rule engine
+    Then all exception records should be valid
+
+
+
+CORE LOGIC:
+IF:
+   DB[column from CASUAL_ATTRIBUTES] == NULL
+AND
+   Rule condition (exception when) = TRUE
+
+→ PASS
+
+ELSE → FAIL
