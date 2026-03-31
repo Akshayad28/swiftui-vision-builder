@@ -1,36 +1,1 @@
-1. Start Scenario
-2. Fetch exception records from DB
-3. For each record:
-   3.1 Identify monitor (HK_LONG / UK_LONG)
-   3.2 Load corresponding JSON rules
-   3.3 Pick rule where:
-        CASUAL_ATTRIBUTES ∈ exception_columns
-   3.4 Fetch actual record from lhone_pos_copy
-   3.5 Validate:
-        ✔ Column (CASUAL_ATTRIBUTES) must be NULL
-        ✔ Evaluate "exception when" dynamically
-   3.6 Combine result → PASS / FAIL
-4. Store result (logs / excel)
-5. Assert all passed
-6. End Scenario
-
-
-Feature: Exception Validation using Dynamic Rules
-
-  Scenario: Validate exception records
-
-    Given I fetch exception records from database
-    When I validate each record using dynamic rule engine
-    Then all exception records should be valid
-
-
-
-CORE LOGIC:
-IF:
-   DB[column from CASUAL_ATTRIBUTES] == NULL
-AND
-   Rule condition (exception when) = TRUE
-
-→ PASS
-
-ELSE → FAIL
+Look if I had to do this manually what I should Have done is: Step 1: Run the query to get all records present in exception table  Step 2: Get their file ID, lan rec id, monitor id and CASUAL_ATTRIBUTES Step 3: Then verify if monitor id is 1 or 2 - if 1 then Monitor will be UK_LONG, if 2 then Monitor HK_LONG Step 4: if the Monitor id is 2 and monitor name is HK_LONG then I will search that record with the file id and lan_rec id in lhone_pos_copy table  Step 5: I will check check for the Column name which CASUAL_ATTRIBUTES this column hold the value for eg. its holds value as CNTRY_CODE_INCORPORATION then I will search for this column in lhone_pos_copy table and check its value is NULL or not  Step: 6: If NULL value is present and all the conditions for exception are passing means "exception when": "At least one field is NULL AND neither is 'HK" then I will mark it as Pass or else fail   So build accordingly  new Feature file with scenario Step definition for all steps  detailed methods for running all queries with existing db connection New methods to fetch data from json and validate that with running queries to get desired output    all things should be covered
