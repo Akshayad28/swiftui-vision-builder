@@ -1,15 +1,15 @@
-Hi All,
-
-I have been working on JIRA LH-11096 for the past week. Initially, there was no test data available in preprod, so with your help we inserted data as per the JIRA requirements. In the first attempt, due to an incorrect effective date, the data was not reflected correctly.  
-
-After the next batch, we re-inserted the data, but the expected results for Forms 8.3 and 8.5 were still not achieved. We then checked with the Ops engineer, identified the issue in the data setup, corrected it, and again inserted the data post batch with all the required details.
-
-Current Issues:
-- Form 8.3 is not getting generated for Non-Connected status  
-- Only Form 8.5 is being generated  
-- Section 3(b) in Form 8.5 is coming empty  
-
-Could you please help in identifying the issue so we can proceed with testing and close the JIRA at the earliest?
-
-Thanks,  
-Akshay
+1. Start Scenario
+2. Fetch exception records from DB
+3. For each record:
+   3.1 Identify monitor (HK_LONG / UK_LONG)
+   3.2 Load corresponding JSON rules
+   3.3 Pick rule where:
+        CASUAL_ATTRIBUTES ∈ exception_columns
+   3.4 Fetch actual record from lhone_pos_copy
+   3.5 Validate:
+        ✔ Column (CASUAL_ATTRIBUTES) must be NULL
+        ✔ Evaluate "exception when" dynamically
+   3.6 Combine result → PASS / FAIL
+4. Store result (logs / excel)
+5. Assert all passed
+6. End Scenario
