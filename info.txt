@@ -1,112 +1,17 @@
-Got it — here’s your final Jira ticket with the improved opening focused on the main scenario 👇
+Hi Anunay/Ritesh,
 
-⸻
+As JIRA **LH-11096** is planned for the April release, I have started testing the scenario for added and removed sub-security categories. However, we are currently facing a blocker due to the below issues:
 
-Issue Type: Bug
+* Due to unavailability of test data, we inserted test data multiple times into the system.
+* Forms **8.3 and 8.5 are not getting generated** from the RNS Report Submission section for the configured ISINs.
+* Yesterday, I worked with Madhura to reinsert the data, but the issue still persists.
+* With Madhura’s help, forms were generated from the backend.
+* Upon validation, **Section 3-B is completely empty**, and no trades are present (this section is critical for our testing).
+* Due to this, we are **completely blocked from testing** the sub-security category addition and removal logic.
 
-Summary:
+I have created a bug with a detailed description and attached all relevant evidence, including the insert and update queries used for test data setup.
 
-Form 8.3 & 8.5 not generated via RNS UI; Section 3-B empty after backend generation for inserted test data
+Since this JIRA is targeted for the April release, requesting your support to resolve this at the earliest.
 
-⸻
-
-Description:
-
-During testing of removed and added sub-security categories scenario, there was no test data available. Hence, test data was manually inserted into the uk_top_daily_trade table for required sub-security categories.
-
-After inserting the data (post execution of lho_pc_uktop_reconciliation job) and updating reporting flags (RPRT_83_FLAG = 'Y', RPRT_85_FLAG = 'Y') for selected ISINs:
-	•	Forms 8.3 and 8.5 are not getting generated from the RNS Report Submission section under UK Takeover Panel for the inserted test data.
-	•	To proceed, forms were generated from backend with the help of developers.
-	•	However, in the generated reports, Section 3-B (required for testing) is empty, and no trades are present, even though data was configured during test setup.
-
-Due to this issue, we are completely blocked from testing the sub-security categories scenario (removal and addition logic).
-
-⸻
-
-Environment:
-	•	Region: UK
-	•	Module: RNS Report Submission – UK Takeover Panel
-	•	Job: lho_pc_uktop_reconciliation
-	•	Database Table: uk_top_daily_trade
-
-⸻
-
-Preconditions:
-	•	No existing test data available
-	•	Test data inserted manually after job execution
-	•	ISINs updated with:
-	•	RPRT_83_FLAG = 'Y'
-	•	RPRT_85_FLAG = 'Y'
-
-⸻
-
-Test Data:
-
-Sub Security Categories used:
-FA, KA, KB, KC, KD, SA, PB
-
-⸻
-
-Steps to Reproduce:
-	1.	Execute lho_pc_uktop_reconciliation job
-	2.	Insert test data into uk_top_daily_trade for sub-security categories (FA, KA, KB, KC, KD, SA, PB)
-	3.	Update reporting flags (RPRT_83_FLAG, RPRT_85_FLAG) to ‘Y’ for selected ISINs
-	4.	Navigate to RNS Report Submission → UK Takeover Panel
-	5.	Attempt to generate/fetch Form 8.3 and 8.5
-	6.	Observe that forms are not generated via UI
-	7.	Generate forms via backend with developer assistance
-	8.	Validate Section 3-B in generated forms
-
-⸻
-
-Expected Result:
-	•	Forms 8.3 and 8.5 should be generated via RNS UI
-	•	Section 3-B should contain trade data
-	•	Sub-security category logic should be validated:
-	•	KA, KB, KD removed from Long – Derivatives
-	•	KA, KB, KC removed from Short – Derivatives
-	•	SA, PB, FA added to Long – Options
-	•	SA, PB, FA added to Short – Options
-
-⸻
-
-Actual Result:
-	•	Forms not generated via RNS UI
-	•	Backend-generated forms have empty Section 3-B
-	•	No trades displayed for configured ISINs
-
-⸻
-
-Impact:
-	•	Complete blocker for testing sub-security category scenario
-	•	Unable to validate addition/removal logic
-
-⸻
-
-Severity: High
-
-Priority: High
-
-⸻
-
-Labels:
-
-UKTOP, RNS, TakeoverPanel, QA
-
-⸻
-
-Assignee:
-
-(To be assigned)
-
-⸻
-
-Attachments:
-	•	Insert queries for test data
-	•	Update queries for reporting flags
-
-Note: All insert and update queries used for test data setup have been attached. Please refer to them for detailed configuration.
-
-⸻
-
-If you want, I can also convert this into a very sharp 3–4 line standup update 👍
+Thanks,
+Akshay
