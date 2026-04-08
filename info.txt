@@ -1,133 +1,22 @@
-Here’s a clear **Jira bug ticket** for this new issue 👇
-
----
-
-### **Issue Type:** Bug
-
-### **Summary:**
-
-Incorrect handling of sub-security categories KD and KC in Derivatives (Long/Short) for Forms 8.3 & 8.5
-
----
-
-### **Description:**
-
-As Forms 8.3 and 8.5 are not getting generated via the RNS UI, we used backend SQL queries (`form_8.3_section_3b` and `form_8.5_section_3b`) to validate the sub-security category scenarios.
-
-Using these queries, we tested all four scenarios related to addition and removal of sub-security categories.
-
-Out of the four scenarios:
-
-* **SA, PB, FA included in Long – Options** → ✅ Passed
-* **SA, PB, FA included in Short – Options** → ✅ Passed
-
-However, issues were observed in the below two scenarios:
-
----
-
-### **Scenario 1:**
-
-**KA, KB, KD excluded from Long – Derivatives**
-
-#### **Expected Result:**
-
-* KA, KB, KD should be removed from **Long – Derivatives**
-* KD should still be present in **Short – Derivatives**
-
-#### **Actual Result:**
-
-* KA and KB are correctly removed from both Forms 8.3 and 8.5
-* However, **KD trades are completely removed from both Long and Short Derivatives**
-* KD is **not present in Short Derivatives**, which is incorrect
-
----
-
-### **Scenario 2:**
-
-**KA, KB, KC excluded from Short – Derivatives**
-
-#### **Expected Result:**
-
-* KA, KB, KC should be removed from **Short – Derivatives**
-* KC should still be present in **Long – Derivatives**
-
-#### **Actual Result:**
-
-* KA and KB are correctly removed from both Forms 8.3 and 8.5
-* However, **KC trades are present in both Long and Short Derivatives**
-* KC is **not removed from Short Derivatives**, which is incorrect
-
----
-
-### **Environment:**
-
-* Region: UK
-* Module: UK Takeover Panel – RNS Reporting
-* Validation Method:
-
-  * `form_8.3_section_3b`
-  * `form_8.5_section_3b`
-
----
-
-### **Steps to Reproduce:**
-
-1. Insert test data for sub-security categories (KA, KB, KC, KD, SA, PB, FA)
-2. Update reporting flags (`RPRT_83_FLAG`, `RPRT_85_FLAG`)
-3. Execute queries:
-
-   * `form_8.3_section_3b`
-   * `form_8.5_section_3b`
-4. Validate Long and Short Derivatives data for each sub-security category
-
----
-
-### **Expected Result (Summary):**
-
-* KD should appear in **Short – Derivatives only**
-* KC should appear in **Long – Derivatives only**
-
----
-
-### **Actual Result (Summary):**
-
-* KD is removed from both Long and Short Derivatives
-* KC is present in both Long and Short Derivatives
-
----
-
-### **Impact:**
-
-* Incorrect implementation of sub-security category filtering logic
-* Partial failure of regulatory reporting scenarios
-* Risk of incorrect data in Takeover Panel reports
-
----
-
-### **Severity:** High
-
-### **Priority:** High
-
----
-
-### **Labels:**
-
-UKTOP, RNS, Derivatives, SubSecurityCategory, QA
-
----
-
-### **Assignee:**
-
-(To be assigned)
-
----
-
-### **Attachments:**
-
-* SQL queries used for validation
-* Sample test data (ISINs & categories)
-* Query result screenshots showing discrepancies
-
----
-
-If you want, I can also create a **very sharp developer note (possible root cause like wrong filter condition / OR vs AND issue)** — that usually helps devs fix it faster 👍
+Form 8.3 and 8.5 Testing Results
+Hi Deepak and Ritesh,
+As Forms 8.3 and 8.5 are currently not generating, I utilized the following SQLs to validate the logic:
+• get_form_8_3_Section3b.sql
+• get_form_8_5_Section3b.sql
+• get_form_8_3_SectionCi.sql
+While two scenarios passed, the following two scenarios involving the Derivatives_Take Over Panel resulted in partial failures:
+Scenario 1: KA, KB, KD excluded from Long – Derivatives_Take Over Panel
+• Expected Result:
+• KA, KB, and KD should be removed from the Long – Derivatives_Take Over Panel.
+• KD should remain present in the Short – Derivatives_Take Over Panel.
+• Actual Result:
+• KA and KB were correctly removed from both the Long and Short – Derivatives_Take Over Panels.
+• Failure: KD trades were completely removed from both the Long and Short – Derivatives_Take Over Panels. KD is missing from the Short panel, which is incorrect.
+Scenario 2: KA, KB, KC excluded from Short – Derivatives_Take Over Panel
+• Expected Result:
+• KA, KB, and KC should be removed from the Short – Derivatives_Take Over Panel.
+• KC should remain present in the Long – Derivatives_Take Over Panel.
+• Actual Result:
+• KA and KB were correctly removed from both the Long and Short – Derivatives_Take Over Panels.
+• Failure: KC trades remain visible in both the Long and Short – Derivatives_Take Over Panels. KC was not filtered out from the Short panel, which is incorrect.
+Please let me know how you would like to proceed with these discrepancies.
