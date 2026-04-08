@@ -1,17 +1,10 @@
-Hi Anunay/Ritesh,
+Hi Ritesh,
 
-As JIRA **LH-11096** is planned for the April release, I have started testing the scenario for added and removed sub-security categories. However, we are currently facing a blocker due to the below issues:
+Thanks for reminding me about this alternative approach.
 
-* Due to unavailability of test data, we inserted test data multiple times into the system.
-* Forms **8.3 and 8.5 are not getting generated** from the RNS Report Submission section for the configured ISINs.
-* Yesterday, I worked with Madhura to reinsert the data, but the issue still persists.
-* With Madhura’s help, forms were generated from the backend.
-* Upon validation, **Section 3-B is completely empty**, and no trades are present (this section is critical for our testing).
-* Due to this, we are **completely blocked from testing** the sub-security category addition and removal logic.
+I had the SQLs you shared earlier and discussed them with Madhura. She has now provided an updated SQL specifically for Form 8.3 – Section 3B. Using this, I am able to validate and proceed with testing all our scenarios.
 
-I have created a bug with a detailed description and attached all relevant evidence, including the insert and update queries used for test data setup.
+Appreciate your help on this.
 
-Since this JIRA is targeted for the April release, requesting your support to resolve this at the earliest.
-
-Thanks,
+Thanks & Regards,  
 Akshay
