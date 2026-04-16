@@ -3,18 +3,20 @@ aggregation_validation:
     project: "Database Automation Framework"
     module: "Aggregation Records Validation"
     level: "Level 4"
+    version: "3.0"
     execution_type: "Database Driven"
-    data_strategy: "No external input - all data fetched dynamically from DB"
-    version: "2.0"
+    data_strategy: "All data fetched dynamically from DB (no external input)"
 
   objective:
     description: >
-      Validate Level 4 aggregation records by deriving values from stage and reference tables.
-      Ensure computed aggregation quantity matches HOLDING_QUANTITY from aggregation table.
+      Validate Level 4 aggregation records by deriving values from stage,
+      eligibility, and reference tables and ensuring computed TOTAL_UL_QUANTITY
+      matches HOLDING_QUANTITY.
 
   tables:
     aggregation_table: "lhone_aggr_pos"
     stage_table: "lhone_stage_pos_copy"
+    eligibility_table: "lhone_europe_eligibility_pos"
     reference_tables:
       - "lhone_monitor_rpt_cat"
       - "lhone_monitor_rpt_sub_cat"
@@ -46,7 +48,6 @@ aggregation_validation:
         FROM lhone_stage_pos_copy
         WHERE LEI = '<LEI>';
       validation:
-        type: "existence"
         condition: "records_count > 0"
 
     step_3_validate_parent_entity:
@@ -56,10 +57,41 @@ aggregation_validation:
         WHERE LEI = '<LEI>'
         AND SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
       validation:
-        type: "mapping"
         condition: "records_count > 0"
 
-    step_4_resolve_report_category:
+    step_4_eligibility_validation:
+      description: >
+        Validate eligibility using FILE_ID and LANDING_REC_ID from stage records.
+
+      fetch_stage_keys:
+        query: |
+          SELECT FILE_ID, LANDING_REC_ID
+          FROM lhone_stage_pos_copy
+          WHERE LEI = '<LEI>'
+          AND SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
+
+      validate_eligibility:
+        approach_1_iterative:
+          query_template: |
+            SELECT *
+            FROM lhone_europe_eligibility_pos
+            WHERE FILE_ID = '<FILE_ID>'
+            AND LANDING_REC_ID = '<LANDING_REC_ID>';
+
+        approach_2_join_based:
+          query: |
+            SELECT s.*, e.*
+            FROM lhone_stage_pos_copy s
+            JOIN lhone_europe_eligibility_pos e
+              ON s.FILE_ID = e.FILE_ID
+             AND s.LANDING_REC_ID = e.LANDING_REC_ID
+            WHERE s.LEI = '<LEI>'
+            AND s.SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
+
+      validation:
+        condition: "eligible records must exist"
+
+    step_5_resolve_report_category:
       logic:
 
         case_non_exempt:
@@ -69,7 +101,7 @@ aggregation_validation:
         case_derived:
           condition: "REPORT_CATEGORY != 'Non-Exempt'"
           steps:
-            - fetch_stage_classification:
+            - fetch_classification:
                 query: |
                   SELECT HOLDING_CLASSIFICATION
                   FROM lhone_stage_pos_copy
@@ -82,21 +114,20 @@ aggregation_validation:
                   FROM lhone_monitor_rpt_cat
                   WHERE REPORT_CATEGORY = '<HOLDING_CLASSIFICATION>';
 
+          fallback:
+            condition: "value not found in reference"
+            output: "Non-Exempt"
+
           output: "HOLDING_CLASSIFICATION"
 
-      validation:
-        type: "referential"
-        condition: "value exists in reference table"
+    step_6_validate_report_sub_category:
 
-    step_5_validate_report_sub_category:
-
-      sub_category_reference_check:
+      reference_validation:
         query: |
           SELECT *
           FROM lhone_monitor_rpt_sub_cat
           WHERE SUB_REPORT_CATEGORY = '<REPORT_SUB_CATEGORY>';
-        validation:
-          condition: "records_count > 0"
+        condition: "records_count > 0"
 
       product_mapping:
         query: |
@@ -110,7 +141,7 @@ aggregation_validation:
           PRODUCT_SUB_TYPE_LIST: "distinct PRODUCT_SUB_TYPE"
           SETTLEMENT_TYPE_LIST: "distinct SETTLEMENT_TYPE"
 
-    step_6_fetch_filtered_stage_records:
+    step_7_fetch_filtered_stage_records:
       query: |
         SELECT *
         FROM lhone_stage_pos_copy
@@ -123,43 +154,49 @@ aggregation_validation:
       validation:
         condition: "records_count > 0"
 
-    step_7_compute_total_ul_quantity:
+    step_8_compute_total_ul_quantity:
 
       description: >
-        Compute TOTAL_UL_QUANTITY using LONG_SHORT_INDICATOR and DELTA_UL_QUANTITY.
-        This logic is independent of REPORT_CATEGORY value.
+        Compute TOTAL_UL_QUANTITY using DELTA_UL_QUANTITY with conditional
+        logic based on LONG_SHORT_INDICATOR and REPORT_SUB_CATEGORY.
 
       initialization:
         TOTAL_UL_QUANTITY: 0
 
-      iteration_logic:
+      computation_rules:
 
-        rule_definition: |
+        primary_rule: |
 
-          IF LONG_SHORT_INDICATOR = 'S'
+          IF (LONG_SHORT_INDICATOR = 'S' AND REPORT_SUB_CATEGORY = 'Shares')
           THEN
               TOTAL_UL_QUANTITY = TOTAL_UL_QUANTITY - DELTA_UL_QUANTITY
           ELSE
               TOTAL_UL_QUANTITY = TOTAL_UL_QUANTITY + DELTA_UL_QUANTITY
 
-      processing_steps:
+        explanation: >
+          Subtraction is ONLY applied when:
+          - LONG_SHORT_INDICATOR = 'S'
+          AND
+          - REPORT_SUB_CATEGORY = 'Shares'
 
-        - for_each_record: "Filtered Stage Records"
+          For all other cases → ADDITION
 
-        - step:
-            input_fields:
-              - LONG_SHORT_INDICATOR
-              - DELTA_UL_QUANTITY
+      iteration:
 
-            operations:
+        for_each_record:
+          input_fields:
+            - LONG_SHORT_INDICATOR
+            - DELTA_UL_QUANTITY
 
-              case_long:
-                condition: "LONG_SHORT_INDICATOR == 'L'"
-                action: "TOTAL_UL_QUANTITY += DELTA_UL_QUANTITY"
+          operations:
 
-              case_short:
-                condition: "LONG_SHORT_INDICATOR == 'S'"
-                action: "TOTAL_UL_QUANTITY -= DELTA_UL_QUANTITY"
+            case_subtraction:
+              condition: "LONG_SHORT_INDICATOR == 'S' AND REPORT_SUB_CATEGORY == 'Shares'"
+              action: "TOTAL_UL_QUANTITY -= DELTA_UL_QUANTITY"
+
+            case_addition:
+              condition: "otherwise"
+              action: "TOTAL_UL_QUANTITY += DELTA_UL_QUANTITY"
 
       post_processing:
 
@@ -167,30 +204,16 @@ aggregation_validation:
           condition: "TOTAL_UL_QUANTITY <= 0"
           action: "TOTAL_UL_QUANTITY = 0"
 
-      example_execution:
+      example:
 
         records:
-          - record_1:
-              LONG_SHORT_INDICATOR: "L"
-              DELTA_UL_QUANTITY: 100
-              result: "0 + 100 = 100"
+          - { indicator: "L", quantity: 100, result: "0 + 100 = 100" }
+          - { indicator: "L", quantity: 200, result: "100 + 200 = 300" }
+          - { indicator: "S", quantity: 100, result: "300 - 100 = 200" }
 
-          - record_2:
-              LONG_SHORT_INDICATOR: "L"
-              DELTA_UL_QUANTITY: 200
-              result: "100 + 200 = 300"
+        final_TOTAL_UL_QUANTITY: 200
 
-          - record_3:
-              LONG_SHORT_INDICATOR: "S"
-              DELTA_UL_QUANTITY: 100
-              result: "300 - 100 = 200"
-
-        final_result: 200
-
-    step_8_final_validation:
-
-      description: >
-        Validate computed TOTAL_UL_QUANTITY against HOLDING_QUANTITY from aggregation table.
+    step_9_final_validation:
 
       validations:
 
@@ -198,11 +221,9 @@ aggregation_validation:
           condition: "TOTAL_UL_QUANTITY == HOLDING_QUANTITY"
           type: "assertion"
 
-        rule_note:
-          description: >
-            REPORT_CATEGORY value (e.g., Shares or any other category)
-            does NOT impact the computation logic of TOTAL_UL_QUANTITY.
-            LONG_SHORT_INDICATOR logic remains consistent across all categories.
+      notes:
+        - "REPORT_SUB_CATEGORY can be any value"
+        - "Computation logic strictly depends on LONG_SHORT_INDICATOR + Shares condition"
 
   data_flow:
     context_storage:
@@ -213,6 +234,8 @@ aggregation_validation:
       - PRODUCT_TYPE_LIST
       - PRODUCT_SUB_TYPE_LIST
       - SETTLEMENT_TYPE_LIST
+      - FILE_ID_LIST
+      - LANDING_REC_ID_LIST
       - FILTERED_STAGE_RECORDS
       - TOTAL_UL_QUANTITY
 
@@ -220,31 +243,34 @@ aggregation_validation:
     - existence
     - mapping
     - referential
+    - eligibility
     - derived
     - computational
     - consistency
 
   edge_cases:
-    - "No stage records found"
-    - "Mixed LONG_SHORT_INDICATOR values"
+    - "No eligible records found"
+    - "Missing eligibility mapping"
+    - "Invalid REPORT_CATEGORY fallback"
+    - "Empty product mapping"
+    - "No filtered stage records"
     - "TOTAL_UL_QUANTITY becomes negative"
     - "Mismatch with HOLDING_QUANTITY"
-    - "Invalid REPORT_CATEGORY reference"
-    - "Missing product mapping"
 
   logging:
     required:
-      - "Executed queries"
-      - "Input parameters"
+      - "All executed queries"
+      - "Eligibility validation results"
       - "Intermediate datasets"
-      - "Computation steps"
-      - "Final computed value vs expected"
+      - "Step-wise computation logs"
+      - "Final computed vs expected values"
 
   success_criteria:
     - "All validations pass"
-    - "Computed quantity matches aggregation value"
+    - "Eligibility confirmed"
+    - "Computed TOTAL_UL_QUANTITY matches HOLDING_QUANTITY"
 
   failure_criteria:
-    - "Mismatch in quantity"
-    - "Missing reference data"
-    - "Incorrect mapping"
+    - "Eligibility failure"
+    - "Missing mappings"
+    - "Computation mismatch"
