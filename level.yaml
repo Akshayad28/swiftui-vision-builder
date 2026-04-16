@@ -1,229 +1,250 @@
-
 aggregation_validation:
-  name: "Level 4 Aggregation Validation"
-  version: "1.0"
-  monitor_id: 1
-  aggregation_level: 4
+  metadata:
+    project: "Database Automation Framework"
+    module: "Aggregation Records Validation"
+    level: "Level 4"
+    execution_type: "Database Driven"
+    data_strategy: "No external input - all data fetched dynamically from DB"
+    version: "2.0"
 
-  description: >
-    This validation ensures that aggregated records in lhone_aggr_pos
-    are correctly derived from transactional data in lhone_stage_pos_copy
-    using business rules defined for Level 4 aggregation.
+  objective:
+    description: >
+      Validate Level 4 aggregation records by deriving values from stage and reference tables.
+      Ensure computed aggregation quantity matches HOLDING_QUANTITY from aggregation table.
 
   tables:
-    aggregated_table: lhone_aggr_pos
-    stage_table: lhone_stage_pos_copy
-    product_map_table: lhone_product_map
-    report_category_table: lhone_monitor_rpt_cat
+    aggregation_table: "lhone_aggr_pos"
+    stage_table: "lhone_stage_pos_copy"
+    reference_tables:
+      - "lhone_monitor_rpt_cat"
+      - "lhone_monitor_rpt_sub_cat"
+      - "lhone_product_map"
 
-  key_definition:
-    description: "Unique grouping key for Level 4 aggregation"
-    fields:
+  preconditions:
+    - AGGREGATION_LEVEL = 4
+    - MONITOR_ID = 1
+    - SECURITY_IDENTIFIER_KEY = "LEI"
+
+  execution_flow:
+
+    step_1_fetch_aggregation_record:
+      query: |
+        SELECT *
+        FROM lhone_aggr_pos
+        WHERE AGGREGATION_LEVEL = '4'
+        AND MONITOR_ID = 1;
+      store:
+        LEI: SECURITY_IDENTIFIER_VALUE
+        PARENT_ENTITY: PARENT_ENTITY
+        REPORT_CATEGORY: REPORT_CATEGORY
+        REPORT_SUB_CATEGORY: REPORT_SUB_CATEGORY
+        HOLDING_QUANTITY: HOLDINGS_QUANTITY
+
+    step_2_validate_lei:
+      query: |
+        SELECT *
+        FROM lhone_stage_pos_copy
+        WHERE LEI = '<LEI>';
+      validation:
+        type: "existence"
+        condition: "records_count > 0"
+
+    step_3_validate_parent_entity:
+      query: |
+        SELECT *
+        FROM lhone_stage_pos_copy
+        WHERE LEI = '<LEI>'
+        AND SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
+      validation:
+        type: "mapping"
+        condition: "records_count > 0"
+
+    step_4_resolve_report_category:
+      logic:
+
+        case_non_exempt:
+          condition: "REPORT_CATEGORY == 'Non-Exempt'"
+          output: "Non-Exempt"
+
+        case_derived:
+          condition: "REPORT_CATEGORY != 'Non-Exempt'"
+          steps:
+            - fetch_stage_classification:
+                query: |
+                  SELECT HOLDING_CLASSIFICATION
+                  FROM lhone_stage_pos_copy
+                  WHERE LEI = '<LEI>'
+                  AND SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
+
+            - validate_reference:
+                query: |
+                  SELECT *
+                  FROM lhone_monitor_rpt_cat
+                  WHERE REPORT_CATEGORY = '<HOLDING_CLASSIFICATION>';
+
+          output: "HOLDING_CLASSIFICATION"
+
+      validation:
+        type: "referential"
+        condition: "value exists in reference table"
+
+    step_5_validate_report_sub_category:
+
+      sub_category_reference_check:
+        query: |
+          SELECT *
+          FROM lhone_monitor_rpt_sub_cat
+          WHERE SUB_REPORT_CATEGORY = '<REPORT_SUB_CATEGORY>';
+        validation:
+          condition: "records_count > 0"
+
+      product_mapping:
+        query: |
+          SELECT *
+          FROM lhone_product_map
+          WHERE UK_LONG_CLASSIFICATION = '<REPORT_SUB_CATEGORY>'
+          AND UK_LONG_SCOPE = 'Y';
+
+        extract_unique:
+          PRODUCT_TYPE_LIST: "distinct PRODUCT_TYPE"
+          PRODUCT_SUB_TYPE_LIST: "distinct PRODUCT_SUB_TYPE"
+          SETTLEMENT_TYPE_LIST: "distinct SETTLEMENT_TYPE"
+
+    step_6_fetch_filtered_stage_records:
+      query: |
+        SELECT *
+        FROM lhone_stage_pos_copy
+        WHERE LEI = '<LEI>'
+        AND SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>'
+        AND PRODUCT_TYPE IN (<PRODUCT_TYPE_LIST>)
+        AND PRODUCT_SUB_TYPE IN (<PRODUCT_SUB_TYPE_LIST>)
+        AND SETTLEMENT_TYPE IN (<SETTLEMENT_TYPE_LIST>);
+
+      validation:
+        condition: "records_count > 0"
+
+    step_7_compute_total_ul_quantity:
+
+      description: >
+        Compute TOTAL_UL_QUANTITY using LONG_SHORT_INDICATOR and DELTA_UL_QUANTITY.
+        This logic is independent of REPORT_CATEGORY value.
+
+      initialization:
+        TOTAL_UL_QUANTITY: 0
+
+      iteration_logic:
+
+        rule_definition: |
+
+          IF LONG_SHORT_INDICATOR = 'S'
+          THEN
+              TOTAL_UL_QUANTITY = TOTAL_UL_QUANTITY - DELTA_UL_QUANTITY
+          ELSE
+              TOTAL_UL_QUANTITY = TOTAL_UL_QUANTITY + DELTA_UL_QUANTITY
+
+      processing_steps:
+
+        - for_each_record: "Filtered Stage Records"
+
+        - step:
+            input_fields:
+              - LONG_SHORT_INDICATOR
+              - DELTA_UL_QUANTITY
+
+            operations:
+
+              case_long:
+                condition: "LONG_SHORT_INDICATOR == 'L'"
+                action: "TOTAL_UL_QUANTITY += DELTA_UL_QUANTITY"
+
+              case_short:
+                condition: "LONG_SHORT_INDICATOR == 'S'"
+                action: "TOTAL_UL_QUANTITY -= DELTA_UL_QUANTITY"
+
+      post_processing:
+
+        negative_handling:
+          condition: "TOTAL_UL_QUANTITY <= 0"
+          action: "TOTAL_UL_QUANTITY = 0"
+
+      example_execution:
+
+        records:
+          - record_1:
+              LONG_SHORT_INDICATOR: "L"
+              DELTA_UL_QUANTITY: 100
+              result: "0 + 100 = 100"
+
+          - record_2:
+              LONG_SHORT_INDICATOR: "L"
+              DELTA_UL_QUANTITY: 200
+              result: "100 + 200 = 300"
+
+          - record_3:
+              LONG_SHORT_INDICATOR: "S"
+              DELTA_UL_QUANTITY: 100
+              result: "300 - 100 = 200"
+
+        final_result: 200
+
+    step_8_final_validation:
+
+      description: >
+        Validate computed TOTAL_UL_QUANTITY against HOLDING_QUANTITY from aggregation table.
+
+      validations:
+
+        quantity_match:
+          condition: "TOTAL_UL_QUANTITY == HOLDING_QUANTITY"
+          type: "assertion"
+
+        rule_note:
+          description: >
+            REPORT_CATEGORY value (e.g., Shares or any other category)
+            does NOT impact the computation logic of TOTAL_UL_QUANTITY.
+            LONG_SHORT_INDICATOR logic remains consistent across all categories.
+
+  data_flow:
+    context_storage:
       - LEI
       - PARENT_ENTITY
       - REPORT_CATEGORY
       - REPORT_SUB_CATEGORY
+      - PRODUCT_TYPE_LIST
+      - PRODUCT_SUB_TYPE_LIST
+      - SETTLEMENT_TYPE_LIST
+      - FILTERED_STAGE_RECORDS
+      - TOTAL_UL_QUANTITY
 
-  filters:
-    aggregated_table_filter:
-      monitor_id: 1
-      aggregation_level: 4
-
-  column_mappings:
-    LEI:
-      source:
-        table: lhone_aggr_pos
-        column_key: SECURITY_IDENTIFIER_KEY
-        column_value: SECURITY_IDENTIFIER_VALUE
-        condition: "SECURITY_IDENTIFIER_KEY = 'LEI'"
-      target:
-        table: lhone_stage_pos_copy
-        column: LEI
-
-    PARENT_ENTITY:
-      source:
-        table: lhone_aggr_pos
-        column: PARENT_ENTITY
-      target:
-        table: lhone_stage_pos_copy
-        column: SDS_ENTITY_FIRST_L
-
-  validation_rules:
-
-    - rule_id: "R1_LEI_EXISTENCE"
-      description: >
-        Validate that LEI present in aggregated table exists in stage table.
-      logic:
-        query: >
-          SELECT * FROM lhone_stage_pos_copy WHERE LEI = :LEI
-      expected: "At least one record should exist"
-      severity: "HIGH"
-
-    - rule_id: "R2_PARENT_ENTITY_MATCH"
-      description: >
-        Validate that PARENT_ENTITY matches SDS_ENTITY_FIRST_L in stage table.
-      logic:
-        condition: "aggr.PARENT_ENTITY == stage.SDS_ENTITY_FIRST_L"
-      severity: "HIGH"
-
-    - rule_id: "R3_REPORT_CATEGORY"
-      description: >
-        Derive REPORT_CATEGORY based on business logic.
-
-      logic:
-        if:
-          condition: "aggr.REPORT_CATEGORY == 'Non-Exempt'"
-          action: "Use as-is"
-
-        else:
-          steps:
-            - step: "Fetch HOLDING_CLASSIFICATION from stage"
-              query: >
-                SELECT DISTINCT HOLDING_CLASSIFICATION
-                FROM lhone_stage_pos_copy
-                WHERE LEI = :LEI
-
-            - step: "Validate against report category table"
-              query: >
-                SELECT * FROM lhone_monitor_rpt_cat
-                WHERE REPORT_CATEGORY = :HOLDING_CLASSIFICATION
-
-      expected: "Derived value must match aggregated table value"
-      severity: "HIGH"
-
-    - rule_id: "R4_REPORT_SUB_CATEGORY"
-      description: >
-        Derive REPORT_SUB_CATEGORY using product mapping.
-
-      grouping:
-        fields:
-          - LEI
-          - SDS_ENTITY_FIRST_L
-          - PRODUCT_TYPE
-          - PRODUCT_SUB_TYPE
-          - SETTLEMENT_TYPE
-
-      steps:
-        - step: "Fetch grouped records from stage"
-
-        - step: "Determine LONG/SHORT behavior"
-          logic:
-            LONG: "Addition"
-            SHORT: "Subtraction"
-
-        - step: "Query product map"
-          query: >
-            SELECT UK_LONG_CLASSIFICATION
-            FROM lhone_product_map
-            WHERE PRODUCT_TYPE = :PRODUCT_TYPE
-              AND PRODUCT_SUB_TYPE = :PRODUCT_SUB_TYPE
-              AND SETTLEMENT_TYPE = :SETTLEMENT_TYPE
-              AND UK_LONG_SCOPE = 'Y'
-
-        - step: "Derive REPORT_SUB_CATEGORY"
-          mapping:
-            UK_LONG_CLASSIFICATION -> REPORT_SUB_CATEGORY
-
-      expected: "Derived sub-category must match aggregated table"
-      severity: "HIGH"
-
-    - rule_id: "R5_AGGREGATION_QUANTITY"
-      description: >
-        Validate net holdings quantity calculation.
-
-      formula: >
-        Net Quantity = SUM(LONG quantities) - SUM(SHORT quantities)
-
-      inputs:
-        - LONG_SHORT_INDICATOR
-        - HOLDINGS_QUANTITY
-
-      expected: "Calculated value must match aggregated HOLDINGS_QUANTITY"
-      severity: "CRITICAL"
-
-    - rule_id: "R6_GROUPING_VALIDATION"
-      description: >
-        Validate aggregation grouping consistency.
-
-      grouping_fields:
-        - LEI
-        - PARENT_ENTITY
-        - MONITOR_ID
-        - AGGREGATION_LEVEL
-
-      expected: >
-        Records must be uniquely grouped and no duplicate aggregation keys should exist.
-      severity: "HIGH"
-
-  execution_flow:
-
-    - step: "Fetch aggregated records"
-      query: >
-        SELECT * FROM lhone_aggr_pos
-        WHERE MONITOR_ID = 1
-        AND AGGREGATION_LEVEL = 4
-
-    - step: "Loop through each aggregated record"
-
-    - step: "Extract LEI"
-
-    - step: "Fetch matching stage records"
-
-    - step: "Apply validation rules R1 to R6"
-
-    - step: "Compute expected aggregation"
-
-    - step: "Compare expected vs actual"
+  validation_types:
+    - existence
+    - mapping
+    - referential
+    - derived
+    - computational
+    - consistency
 
   edge_cases:
-
-    - "LEI not present in stage table"
-    - "Parent entity mismatch"
-    - "Invalid report category mapping"
+    - "No stage records found"
+    - "Mixed LONG_SHORT_INDICATOR values"
+    - "TOTAL_UL_QUANTITY becomes negative"
+    - "Mismatch with HOLDING_QUANTITY"
+    - "Invalid REPORT_CATEGORY reference"
     - "Missing product mapping"
-    - "All SHORT or all LONG records"
-    - "Null or empty values"
-    - "Duplicate aggregation records"
-
-  assertions:
-
-    - type: "EQUALITY"
-      fields:
-        - HOLDINGS_QUANTITY
-
-    - type: "EXISTENCE"
-      fields:
-        - LEI
-
-    - type: "MAPPING_VALIDATION"
-      fields:
-        - REPORT_CATEGORY
-        - REPORT_SUB_CATEGORY
 
   logging:
+    required:
+      - "Executed queries"
+      - "Input parameters"
+      - "Intermediate datasets"
+      - "Computation steps"
+      - "Final computed value vs expected"
 
-    level: "INFO"
-    include:
-      - LEI
-      - PARENT_ENTITY
-      - EXPECTED_QUANTITY
-      - ACTUAL_QUANTITY
-      - VALIDATION_STATUS
+  success_criteria:
+    - "All validations pass"
+    - "Computed quantity matches aggregation value"
 
-  reporting:
-
-    format: "Allure/Extent"
-    include:
-      - rule_id
-      - status
-      - expected
-      - actual
-      - error_message
-
-  performance:
-
-    recommendations:
-      - "Use batch queries instead of row-by-row DB calls"
-      - "Cache product map data"
-      - "Use indexing on LEI and PRODUCT_TYPE columns"
-      - "Parallel execution for large datasets"
+  failure_criteria:
+    - "Mismatch in quantity"
+    - "Missing reference data"
+    - "Incorrect mapping"
