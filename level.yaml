@@ -3,15 +3,49 @@ aggregation_validation:
     project: "Database Automation Framework"
     module: "Aggregation Records Validation"
     level: "Level 4"
-    version: "3.0"
+    version: "5.0"
     execution_type: "Database Driven"
-    data_strategy: "All data fetched dynamically from DB (no external input)"
+    processing_mode: "DB Cursor-Based Sequential Processing"
 
   objective:
     description: >
-      Validate Level 4 aggregation records by deriving values from stage,
-      eligibility, and reference tables and ensuring computed TOTAL_UL_QUANTITY
-      matches HOLDING_QUANTITY.
+      Fetch one record at a time directly from lhone_aggr_pos table,
+      execute full validation pipeline on that record, then fetch next record
+      and repeat until all records are processed.
+
+  processing_strategy:
+
+    data_fetching_model:
+      type: "cursor_based"
+      description: >
+        Records are NOT loaded fully into memory.
+        Instead, one record is fetched, processed completely,
+        and only then the next record is fetched.
+
+    execution_flow:
+
+      step_1_fetch_single_record:
+        query: |
+          SELECT *
+          FROM lhone_aggr_pos
+          WHERE AGGREGATION_LEVEL = '4'
+          AND MONITOR_ID = 1
+          ORDER BY BUSINESS_DATE;
+
+        mode: "streaming / cursor"
+
+      step_2_iteration_control:
+        loop: "while(result_set.hasNext())"
+        actions:
+          - fetch_next_record
+          - process_record_end_to_end
+          - discard_context
+          - continue
+
+      guarantees:
+        - "Only one record exists in memory at any time"
+        - "No cross-record data contamination"
+        - "Each record fully validated before next fetch"
 
   tables:
     aggregation_table: "lhone_aggr_pos"
@@ -22,19 +56,15 @@ aggregation_validation:
       - "lhone_monitor_rpt_sub_cat"
       - "lhone_product_map"
 
-  preconditions:
-    - AGGREGATION_LEVEL = 4
-    - MONITOR_ID = 1
-    - SECURITY_IDENTIFIER_KEY = "LEI"
+  per_record_execution_pipeline:
 
-  execution_flow:
+    step_0_initialize:
+      actions:
+        - reset_context
+        - TOTAL_UL_QUANTITY = 0
 
-    step_1_fetch_aggregation_record:
-      query: |
-        SELECT *
-        FROM lhone_aggr_pos
-        WHERE AGGREGATION_LEVEL = '4'
-        AND MONITOR_ID = 1;
+    step_1_extract_data:
+      source: "current_record"
       store:
         LEI: SECURITY_IDENTIFIER_VALUE
         PARENT_ENTITY: PARENT_ENTITY
@@ -49,6 +79,7 @@ aggregation_validation:
         WHERE LEI = '<LEI>';
       validation:
         condition: "records_count > 0"
+        on_failure: "terminate_current_record"
 
     step_3_validate_parent_entity:
       query: |
@@ -58,40 +89,24 @@ aggregation_validation:
         AND SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
       validation:
         condition: "records_count > 0"
+        on_failure: "terminate_current_record"
 
     step_4_eligibility_validation:
-      description: >
-        Validate eligibility using FILE_ID and LANDING_REC_ID from stage records.
-
-      fetch_stage_keys:
-        query: |
-          SELECT FILE_ID, LANDING_REC_ID
-          FROM lhone_stage_pos_copy
-          WHERE LEI = '<LEI>'
-          AND SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
-
-      validate_eligibility:
-        approach_1_iterative:
-          query_template: |
-            SELECT *
-            FROM lhone_europe_eligibility_pos
-            WHERE FILE_ID = '<FILE_ID>'
-            AND LANDING_REC_ID = '<LANDING_REC_ID>';
-
-        approach_2_join_based:
-          query: |
-            SELECT s.*, e.*
-            FROM lhone_stage_pos_copy s
-            JOIN lhone_europe_eligibility_pos e
-              ON s.FILE_ID = e.FILE_ID
-             AND s.LANDING_REC_ID = e.LANDING_REC_ID
-            WHERE s.LEI = '<LEI>'
-            AND s.SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
+      query: |
+        SELECT s.*, e.*
+        FROM lhone_stage_pos_copy s
+        JOIN lhone_europe_eligibility_pos e
+          ON s.FILE_ID = e.FILE_ID
+         AND s.LANDING_REC_ID = e.LANDING_REC_ID
+        WHERE s.LEI = '<LEI>'
+        AND s.SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
 
       validation:
-        condition: "eligible records must exist"
+        condition: "eligible_records_count > 0"
+        on_failure: "terminate_current_record"
 
     step_5_resolve_report_category:
+
       logic:
 
         case_non_exempt:
@@ -115,19 +130,18 @@ aggregation_validation:
                   WHERE REPORT_CATEGORY = '<HOLDING_CLASSIFICATION>';
 
           fallback:
-            condition: "value not found in reference"
             output: "Non-Exempt"
-
-          output: "HOLDING_CLASSIFICATION"
 
     step_6_validate_report_sub_category:
 
-      reference_validation:
+      reference_check:
         query: |
           SELECT *
           FROM lhone_monitor_rpt_sub_cat
           WHERE SUB_REPORT_CATEGORY = '<REPORT_SUB_CATEGORY>';
-        condition: "records_count > 0"
+        validation:
+          condition: "records_count > 0"
+          on_failure: "terminate_current_record"
 
       product_mapping:
         query: |
@@ -136,10 +150,10 @@ aggregation_validation:
           WHERE UK_LONG_CLASSIFICATION = '<REPORT_SUB_CATEGORY>'
           AND UK_LONG_SCOPE = 'Y';
 
-        extract_unique:
-          PRODUCT_TYPE_LIST: "distinct PRODUCT_TYPE"
-          PRODUCT_SUB_TYPE_LIST: "distinct PRODUCT_SUB_TYPE"
-          SETTLEMENT_TYPE_LIST: "distinct SETTLEMENT_TYPE"
+        extract:
+          PRODUCT_TYPE_LIST
+          PRODUCT_SUB_TYPE_LIST
+          SETTLEMENT_TYPE_LIST
 
     step_7_fetch_filtered_stage_records:
       query: |
@@ -153,124 +167,64 @@ aggregation_validation:
 
       validation:
         condition: "records_count > 0"
+        on_failure: "terminate_current_record"
 
     step_8_compute_total_ul_quantity:
-
-      description: >
-        Compute TOTAL_UL_QUANTITY using DELTA_UL_QUANTITY with conditional
-        logic based on LONG_SHORT_INDICATOR and REPORT_SUB_CATEGORY.
 
       initialization:
         TOTAL_UL_QUANTITY: 0
 
-      computation_rules:
+      computation_rule:
 
-        primary_rule: |
-
-          IF (LONG_SHORT_INDICATOR = 'S' AND REPORT_SUB_CATEGORY = 'Shares')
-          THEN
-              TOTAL_UL_QUANTITY = TOTAL_UL_QUANTITY - DELTA_UL_QUANTITY
-          ELSE
-              TOTAL_UL_QUANTITY = TOTAL_UL_QUANTITY + DELTA_UL_QUANTITY
-
-        explanation: >
-          Subtraction is ONLY applied when:
-          - LONG_SHORT_INDICATOR = 'S'
-          AND
-          - REPORT_SUB_CATEGORY = 'Shares'
-
-          For all other cases → ADDITION
+        description: >
+          Subtract ONLY when:
+          LONG_SHORT_INDICATOR = 'S'
+          AND REPORT_SUB_CATEGORY = 'Shares'
+          Otherwise ADD
 
       iteration:
-
         for_each_record:
-          input_fields:
-            - LONG_SHORT_INDICATOR
-            - DELTA_UL_QUANTITY
 
-          operations:
+          case_subtraction:
+            condition: "LONG_SHORT_INDICATOR == 'S' AND REPORT_SUB_CATEGORY == 'Shares'"
+            action: "TOTAL_UL_QUANTITY -= DELTA_UL_QUANTITY"
 
-            case_subtraction:
-              condition: "LONG_SHORT_INDICATOR == 'S' AND REPORT_SUB_CATEGORY == 'Shares'"
-              action: "TOTAL_UL_QUANTITY -= DELTA_UL_QUANTITY"
-
-            case_addition:
-              condition: "otherwise"
-              action: "TOTAL_UL_QUANTITY += DELTA_UL_QUANTITY"
+          case_addition:
+            condition: "otherwise"
+            action: "TOTAL_UL_QUANTITY += DELTA_UL_QUANTITY"
 
       post_processing:
-
-        negative_handling:
-          condition: "TOTAL_UL_QUANTITY <= 0"
-          action: "TOTAL_UL_QUANTITY = 0"
-
-      example:
-
-        records:
-          - { indicator: "L", quantity: 100, result: "0 + 100 = 100" }
-          - { indicator: "L", quantity: 200, result: "100 + 200 = 300" }
-          - { indicator: "S", quantity: 100, result: "300 - 100 = 200" }
-
-        final_TOTAL_UL_QUANTITY: 200
+        condition: "TOTAL_UL_QUANTITY <= 0"
+        action: "TOTAL_UL_QUANTITY = 0"
 
     step_9_final_validation:
+      validation:
+        condition: "TOTAL_UL_QUANTITY == HOLDING_QUANTITY"
+        on_failure: "mark_record_failed"
 
-      validations:
+    step_10_cleanup:
+      actions:
+        - clear_context
+        - release_memory
 
-        quantity_match:
-          condition: "TOTAL_UL_QUANTITY == HOLDING_QUANTITY"
-          type: "assertion"
+  execution_control:
+    mode: "record_by_record"
+    failure_handling:
+      continue_on_failure: true
+      fail_fast: false
 
-      notes:
-        - "REPORT_SUB_CATEGORY can be any value"
-        - "Computation logic strictly depends on LONG_SHORT_INDICATOR + Shares condition"
-
-  data_flow:
-    context_storage:
-      - LEI
-      - PARENT_ENTITY
-      - REPORT_CATEGORY
-      - REPORT_SUB_CATEGORY
-      - PRODUCT_TYPE_LIST
-      - PRODUCT_SUB_TYPE_LIST
-      - SETTLEMENT_TYPE_LIST
-      - FILE_ID_LIST
-      - LANDING_REC_ID_LIST
-      - FILTERED_STAGE_RECORDS
-      - TOTAL_UL_QUANTITY
-
-  validation_types:
-    - existence
-    - mapping
-    - referential
-    - eligibility
-    - derived
-    - computational
-    - consistency
-
-  edge_cases:
-    - "No eligible records found"
-    - "Missing eligibility mapping"
-    - "Invalid REPORT_CATEGORY fallback"
-    - "Empty product mapping"
-    - "No filtered stage records"
-    - "TOTAL_UL_QUANTITY becomes negative"
-    - "Mismatch with HOLDING_QUANTITY"
-
-  logging:
-    required:
-      - "All executed queries"
-      - "Eligibility validation results"
-      - "Intermediate datasets"
-      - "Step-wise computation logs"
-      - "Final computed vs expected values"
+  guarantees:
+    - "Strict one-record-at-a-time processing"
+    - "Each record fully validated before next fetch"
+    - "No shared state across records"
+    - "Deterministic and debuggable execution"
 
   success_criteria:
-    - "All validations pass"
-    - "Eligibility confirmed"
-    - "Computed TOTAL_UL_QUANTITY matches HOLDING_QUANTITY"
+    - "Each record validated independently"
+    - "Correct TOTAL_UL_QUANTITY calculation"
+    - "Matches HOLDING_QUANTITY"
 
   failure_criteria:
-    - "Eligibility failure"
-    - "Missing mappings"
+    - "Validation failure at any step"
     - "Computation mismatch"
+    - "Eligibility failure"
