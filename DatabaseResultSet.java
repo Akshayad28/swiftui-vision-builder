@@ -1,36 +1,55 @@
-// UPDATED: Now performs an INNER JOIN to eligibility to ensure ONLY eligible records are counted
-    public List<Map<String, Object>> getStagingRecordsByProductMap(
-            Connection conn, String lei, String parentEntity, Map<String, Set<String>> mappings, 
-            int jobId, String businessDate, int monitorId) throws SQLException {
+private boolean calculateAndValidateQuantityForRecord(Map<String, Object> record, Map<String, String> reportRow, boolean continueValidation) {
+        if (!continueValidation || record.get("VALID_STAGE_RECORDS") == null) {
+            reportRow.put("Quantity Status", "SKIPPED");
+            return false;
+        }
+
+        List<Map<String, Object>> stageRecords = (List<Map<String, Object>>) record.get("VALID_STAGE_RECORDS");
+        double totalUlQuantity = 0.0;
+        int skippedCount = 0; // Track how many records get skipped for logging
+
+        logger.info("  -> QUANTITY: Calculating total across {} valid staging records.", stageRecords.size());
+
+        for (Map<String, Object> stageRec : stageRecords) {
+            // NEW VALIDATION: Check if ISSUER_VOTING_RIGHTS_OUTSTANDING is empty or null
+            Object votingRights = stageRec.get("ISSUER_VOTING_RIGHTS_OUTSTANDING");
+            if (votingRights == null || String.valueOf(votingRights).trim().isEmpty()) {
+                logger.warn("     [!] Skipping Row - ISSUER_VOTING_RIGHTS_OUTSTANDING is empty or null.");
+                skippedCount++;
+                continue; // Skips the addition/subtraction and moves to the next record
+            }
+
+            String indicator = (String) stageRec.get("LONG_SHORT_INDICATOR");
+            double delta = getDoubleValue(stageRec.get("DELTA_UL_QUANTITY"));
+
+            logger.debug("     Processing Row - Indicator: {}, Delta: {}", indicator, delta);
+
+            if ("S".equalsIgnoreCase(indicator) || "SHORT".equalsIgnoreCase(indicator)) {
+                totalUlQuantity -= delta;
+            } else {
+                totalUlQuantity += delta;
+            }
+        }
+
+        if (totalUlQuantity <= 0) {
+            logger.debug("     Total calculated as <= 0. Defaulting final value to 0.0.");
+            totalUlQuantity = 0.0;
+        }
+
+        record.put("CALCULATED_TOTAL_QTY", totalUlQuantity);
+        reportRow.put("Calculated Qty", String.format("%.2f", totalUlQuantity));
+
+        double expectedHoldings = getDoubleValue(record.get("HOLDINGS_QUANTITY"));
         
-        Set<String> pTypes = mappings.get("PRODUCT_TYPE");
-        Set<String> sTypes = mappings.get("PRODUCT_SUB_TYPE");
-        Set<String> setTypes = mappings.get("SETTLEMENT_TYPE");
+        logger.info("     Validation -> Expected: {}, Calculated: {} (Skipped {} invalid records)", expectedHoldings, totalUlQuantity, skippedCount);
 
-        if (pTypes.isEmpty() || sTypes.isEmpty() || setTypes.isEmpty()) return new ArrayList<>();
-
-        String query = "SELECT s.LONG_SHORT_INDICATOR, s.DELTA_UL_QUANTITY, s.ISSUER_VOTING_RIGHTS_OUTSTANDING " +
-                       "FROM lhone_stage_pos_copy s " +
-                       "INNER JOIN lhone_europe_eligibility_pos e " +
-                       "  ON s.FILE_ID = e.FILE_ID AND s.LANDING_REC_ID = e.LANDING_REC_ID " +
-                       "WHERE s.LEI = ? AND s.SDS_ENTITY_FIRST_L = ? " +
-                       "  AND s.JOB_ID = ? AND s.BUSINESS_DATE = ? AND e.MONITOR_ID = ? " +
-                       "  AND s.PRODUCT_TYPE IN (" + buildInClausePlaceholders(pTypes.size()) + ") " +
-                       "  AND s.PRODUCT_SUB_TYPE IN (" + buildInClausePlaceholders(sTypes.size()) + ") " +
-                       "  AND s.SETTLEMENT_TYPE IN (" + buildInClausePlaceholders(setTypes.size()) + ")";
-
-        try (PreparedStatement pstmt = conn.prepareStatement(query)) {
-            int index = 1;
-            pstmt.setString(index++, lei);
-            pstmt.setString(index++, parentEntity);
-            pstmt.setInt(index++, jobId);
-            pstmt.setString(index++, businessDate);
-            pstmt.setInt(index++, monitorId); // Dynamically binding the Monitor ID here
-
-            for (String type : pTypes) pstmt.setString(index++, type);
-            for (String subType : sTypes) pstmt.setString(index++, subType);
-            for (String settleType : setTypes) pstmt.setString(index++, settleType);
-
-            return convertResultSetToList(pstmt.executeQuery());
+        if (Math.abs(totalUlQuantity - expectedHoldings) < 0.0001) {
+            logger.info("     [✓] PASSED: Quantities match.");
+            reportRow.put("Quantity Status", "PASSED");
+            return true;
+        } else {
+            logger.error("     [X] FAILED: Quantity mismatch detected.");
+            reportRow.put("Quantity Status", "FAILED - Mismatch");
+            return false;
         }
     }
