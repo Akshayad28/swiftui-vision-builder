@@ -1,63 +1,9 @@
-package com.leadingeuropeanbank.testautomation.steps;
-
-import com.leadingeuropeanbank.testautomation.hooks.Hooks;
-import com.leadingeuropeanbank.testautomation.models.*;
-import com.leadingeuropeanbank.testautomation.utils.DatabaseResultSet;
-import com.leadingeuropeanbank.testautomation.utils.ExcelReportGenerator;
-
-import io.cucumber.java.Before;
-import io.cucumber.java.Scenario;
-import io.cucumber.java.en.Then;
-import io.cucumber.java.en.When;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-
-import java.util.*;
-
-public class AggrLevel4Steps {
-
-    private static final Logger logger = LogManager.getLogger(AggrLevel4Steps.class);
-
-    private DatabaseResultSet dbResultSet = new DatabaseResultSet();
-    private List<Map<String, Object>> aggrRecords;
-    private List<Map<String, String>> testResults = new ArrayList<>();
-    private Scenario testScenario;
-    
-    // Global variables to hold the common parameters
-    private String businessDate;
-    private int jobId;
-
-    @Before
-    public void beforeScenario(Scenario scenario) {
-        this.testScenario = scenario;
-        logger.info("======================================================");
-        logger.info("STARTING SCENARIO: " + scenario.getName());
-        logger.info("======================================================");
-    }
-
-    @When("I fetch the top {int} records for Level 4 aggregation using Run ID {int} and Business Date {string}")
-    public void fetchTopRecords(int recordLimit, int runId, String businessDate) throws Exception {
-        logger.info("========== STEP 1: Fetching Aggregation Records ==========");
-        logger.info("Parameters -> Record Limit: {}, Run ID: {}, Business Date: {}", recordLimit, runId, businessDate);
-        
-        // Store business date globally for use in downstream queries
-        this.businessDate = businessDate;
-        
-        aggrRecords = dbResultSet.getTopAggrRecords(Hooks.prepordlhoneConn, recordLimit, "4", runId, businessDate);
-        
-        Assert.assertNotNull("CRITICAL FAILURE: The returned aggregation records list is null!", aggrRecords);
-        Assert.assertFalse("CRITICAL FAILURE: No records found in lhone_aggr_pos for the given Run ID and Business Date!", aggrRecords.isEmpty());
-        
-        logger.info("Successfully fetched {} records from lhone_aggr_pos.", aggrRecords.size());
-    }
-
-    @Then("I sequentially validate each record through the Level 4 pipeline for Monitor {int} and Job ID {int}")
+@Then("I sequentially validate each record through the Level 4 pipeline for Monitor {int} and Job ID {int}")
     public void sequentiallyValidateEachRecord(int monitorId, int jobId) throws Exception {
         logger.info("========== STEP 2: Processing Records Sequentially ==========");
         logger.info("Parameters -> Monitor ID: {}, Job ID: {}", monitorId, jobId);
         
-        this.jobId = jobId; // Store globally for this scenario
+        this.jobId = jobId;
 
         for (int i = 0; i < aggrRecords.size(); i++) {
             Map<String, Object> record = aggrRecords.get(i);
@@ -71,7 +17,10 @@ public class AggrLevel4Steps {
 
             boolean isEligible = validateEligibilityForRecord(record, reportRow, monitorId);
             validateCategoryForRecord(record, reportRow, isEligible);
-            boolean isSubCatValid = validateSubCategoryForRecord(record, reportRow, isEligible);
+            
+            // UPDATED: Passing monitorId here so we can join eligibility in the DB call!
+            boolean isSubCatValid = validateSubCategoryForRecord(record, reportRow, isEligible, monitorId);
+            
             boolean isQtyValid = calculateAndValidateQuantityForRecord(record, reportRow, isSubCatValid);
             calculateAndValidatePercentageForRecord(record, reportRow, isSubCatValid, isQtyValid);
 
@@ -80,116 +29,8 @@ public class AggrLevel4Steps {
         }
     }
 
-    @Then("I generate the detailed Excel validation report")
-    public void generateExcelReport() {
-        logger.info("========== STEP 3: Generating Report & Final Assertions ==========");
-        
-        ExcelReportGenerator.generateReport(testResults, "Level4_Aggregation_Report");
-        
-        int failedCount = 0;
-        for (Map<String, String> row : testResults) {
-            if ("FAILED".equals(row.get("Overall Status"))) {
-                failedCount++;
-            }
-        }
-
-        if (failedCount > 0) {
-            logger.error("❌ FINAL ASSERTION FAILED: {} out of {} records failed database validation.", failedCount, testResults.size());
-            Assert.fail("Database Validation Failed for " + failedCount + " records. Please review the generated Excel report in the target folder.");
-        } else {
-            logger.info("✅ FINAL ASSERTION PASSED: All {} records successfully validated.", testResults.size());
-            Assert.assertTrue("All records passed validation.", true);
-        }
-    }
-
-    // ==================== PIPELINE HELPER METHODS ====================
-
-    private Map<String, String> initializeReportRow(Map<String, Object> record) {
-        Map<String, String> resultRow = new LinkedHashMap<>();
-        resultRow.put("LEI", (String) record.get("SECURITY_IDENTIFIER_VALUE"));
-        resultRow.put("Parent Entity", (String) record.get("PARENT_ENTITY"));
-        resultRow.put("Aggr Report Category", (String) record.get("REPORT_CATEGORY"));
-        resultRow.put("Aggr Sub-Category", (String) record.get("REPORT_SUB_CATEGORY"));
-        resultRow.put("Expected Holdings Qty", String.valueOf(record.get("HOLDINGS_QUANTITY")));
-        resultRow.put("Expected Holding %", String.valueOf(record.get("HOLDING_PERCENTAGE")));
-        
-        resultRow.put("Eligibility Status", "Pending");
-        resultRow.put("Category Status", "Pending");
-        resultRow.put("Sub-Category Status", "Pending");
-        resultRow.put("Calculated Qty", "Pending");
-        resultRow.put("Quantity Status", "Pending");
-        resultRow.put("Calculated %", "Pending");
-        resultRow.put("Percentage Status", "Pending");
-        resultRow.put("Overall Status", "Pending");
-        return resultRow;
-    }
-
-    private boolean validateEligibilityForRecord(Map<String, Object> record, Map<String, String> reportRow, int monitorId) throws Exception {
-        String lei = (String) record.get("SECURITY_IDENTIFIER_VALUE");
-        String parentEntity = (String) record.get("PARENT_ENTITY");
-
-        // Pass jobId and businessDate to the Staging query
-        List<Map<String, Object>> stageRecords = dbResultSet.getStagingRecords(Hooks.prepordlhoneConn, lei, parentEntity, this.jobId, this.businessDate);
-        logger.info("  -> ELIGIBILITY: Found {} staging records for LEI: {}", stageRecords.size(), lei);
-
-        if (stageRecords.isEmpty()) {
-            logger.error("     [X] FAILED: No staging records found.");
-            reportRow.put("Eligibility Status", "FAILED - Entity not found in stage table");
-            return false;
-        }
-
-        Set<String> holdingClasses = new HashSet<>();
-        boolean isEligible = false;
-
-        for (Map<String, Object> stageRecord : stageRecords) {
-            String fileId = String.valueOf(stageRecord.get("FILE_ID"));
-            String landingRecId = String.valueOf(stageRecord.get("LANDING_REC_ID"));
-            String holdingClass = (String) stageRecord.get("HOLDING_CLASSIFICATION");
-
-            // Pass jobId and businessDate to the Eligibility query
-            if (dbResultSet.checkEligibility(Hooks.prepordlhoneConn, fileId, landingRecId, monitorId, this.jobId, this.businessDate)) {
-                isEligible = true;
-                if (holdingClass != null) holdingClasses.add(holdingClass);
-            }
-        }
-
-        if (isEligible) {
-            logger.info("     [✓] PASSED: Eligibility confirmed. Holding Classes extracted: {}", holdingClasses);
-            reportRow.put("Eligibility Status", "PASSED");
-            record.put("HOLDING_CLASSES", holdingClasses);
-            return true;
-        } else {
-            logger.error("     [X] FAILED: Found in staging, but no matching eligibility record found.");
-            reportRow.put("Eligibility Status", "FAILED - Found in stage but NOT eligible");
-            return false;
-        }
-    }
-
-    private void validateCategoryForRecord(Map<String, Object> record, Map<String, String> reportRow, boolean continueValidation) throws Exception {
-        if (!continueValidation) {
-            logger.warn("  -> CATEGORY: Skipped due to previous failure.");
-            reportRow.put("Category Status", "SKIPPED");
-            return;
-        }
-
-        String rptCategory = (String) record.get("REPORT_CATEGORY");
-        logger.info("  -> CATEGORY: Validating Aggregation Category: '{}'", rptCategory);
-
-        if ("Non-Exempt".equalsIgnoreCase(rptCategory)) {
-            reportRow.put("Category Status", "PASSED - Native Non-Exempt");
-        } else {
-            Set<String> holdingClasses = (Set<String>) record.get("HOLDING_CLASSES");
-            boolean foundInMonitor = dbResultSet.validateCategoryFallback(Hooks.prepordlhoneConn, holdingClasses);
-            
-            if (foundInMonitor) {
-                reportRow.put("Category Status", "PASSED - Fallback mapped");
-            } else {
-                reportRow.put("Category Status", "PASSED - Defaulted to Non-Exempt");
-            }
-        }
-    }
-
-    private boolean validateSubCategoryForRecord(Map<String, Object> record, Map<String, String> reportRow, boolean continueValidation) throws Exception {
+    // UPDATED: Added int monitorId to the parameters
+    private boolean validateSubCategoryForRecord(Map<String, Object> record, Map<String, String> reportRow, boolean continueValidation, int monitorId) throws Exception {
         if (!continueValidation) {
             reportRow.put("Sub-Category Status", "SKIPPED");
             return false;
@@ -213,101 +54,18 @@ public class AggrLevel4Steps {
             return false;
         }
 
-        // Pass jobId and businessDate to the final Staging Mappings query
+        // UPDATED: Passing monitorId down to the DB call
         List<Map<String, Object>> validStageRecords = dbResultSet.getStagingRecordsByProductMap(
-                Hooks.prepordlhoneConn, lei, parentEntity, mappings, this.jobId, this.businessDate);
+                Hooks.prepordlhoneConn, lei, parentEntity, mappings, this.jobId, this.businessDate, monitorId);
 
         if (validStageRecords.isEmpty()) {
-            logger.error("     [X] FAILED: Staging records exist, but none match the product mappings.");
-            reportRow.put("Sub-Category Status", "FAILED - Stage mappings mismatch");
+            logger.error("     [X] FAILED: Staging records exist, but none are eligible AND match mappings.");
+            reportRow.put("Sub-Category Status", "FAILED - Stage mappings mismatch or not eligible");
             return false;
         }
 
-        logger.info("     [✓] PASSED: Sub-Category valid and mappings confirmed.");
+        logger.info("     [✓] PASSED: Found {} perfectly matched & eligible records.", validStageRecords.size());
         record.put("VALID_STAGE_RECORDS", validStageRecords);
         reportRow.put("Sub-Category Status", "PASSED");
         return true;
     }
-
-    private boolean calculateAndValidateQuantityForRecord(Map<String, Object> record, Map<String, String> reportRow, boolean continueValidation) {
-        if (!continueValidation || record.get("VALID_STAGE_RECORDS") == null) {
-            reportRow.put("Quantity Status", "SKIPPED");
-            return false;
-        }
-
-        List<Map<String, Object>> stageRecords = (List<Map<String, Object>>) record.get("VALID_STAGE_RECORDS");
-        double totalUlQuantity = 0.0;
-
-        for (Map<String, Object> stageRec : stageRecords) {
-            String indicator = (String) stageRec.get("LONG_SHORT_INDICATOR");
-            double delta = getDoubleValue(stageRec.get("DELTA_UL_QUANTITY"));
-
-            if ("S".equalsIgnoreCase(indicator) || "SHORT".equalsIgnoreCase(indicator)) {
-                totalUlQuantity -= delta;
-            } else {
-                totalUlQuantity += delta;
-            }
-        }
-
-        if (totalUlQuantity <= 0) totalUlQuantity = 0.0;
-
-        record.put("CALCULATED_TOTAL_QTY", totalUlQuantity);
-        reportRow.put("Calculated Qty", String.format("%.2f", totalUlQuantity));
-
-        double expectedHoldings = getDoubleValue(record.get("HOLDINGS_QUANTITY"));
-        
-        if (Math.abs(totalUlQuantity - expectedHoldings) < 0.0001) {
-            reportRow.put("Quantity Status", "PASSED");
-            return true;
-        } else {
-            reportRow.put("Quantity Status", "FAILED - Mismatch");
-            return false;
-        }
-    }
-
-    private void calculateAndValidatePercentageForRecord(Map<String, Object> record, Map<String, String> reportRow, boolean subCatValid, boolean qtyValid) {
-        if (!subCatValid || record.get("VALID_STAGE_RECORDS") == null) {
-            reportRow.put("Percentage Status", "SKIPPED");
-            reportRow.put("Overall Status", "FAILED");
-            return;
-        }
-
-        List<Map<String, Object>> stageRecords = (List<Map<String, Object>>) record.get("VALID_STAGE_RECORDS");
-        double totalUlQuantity = (Double) record.get("CALCULATED_TOTAL_QTY");
-        
-        double votingRights = getDoubleValue(stageRecords.get(0).get("ISSUER_VOTING_RIGHTS_OUTSTANDING"));
-        double expectedPercentage = getDoubleValue(record.get("HOLDING_PERCENTAGE"));
-
-        if (votingRights <= 0) {
-            reportRow.put("Percentage Status", "FAILED - Voting rights is 0 or null");
-            reportRow.put("Calculated %", "N/A");
-            reportRow.put("Overall Status", "FAILED");
-            return;
-        }
-
-        double calculatedPercentage = (totalUlQuantity / votingRights) * 100;
-        reportRow.put("Calculated %", String.format("%.4f", calculatedPercentage));
-
-        if (Math.abs(calculatedPercentage - expectedPercentage) < 0.0001) {
-            reportRow.put("Percentage Status", "PASSED");
-            if (qtyValid) {
-                logger.info("  => OVERALL RECORD STATUS: PASSED");
-                reportRow.put("Overall Status", "PASSED");
-            } else {
-                reportRow.put("Overall Status", "FAILED");
-            }
-        } else {
-            reportRow.put("Percentage Status", "FAILED - Mismatch (Expected: " + expectedPercentage + ")");
-            reportRow.put("Overall Status", "FAILED");
-        }
-    }
-
-    private double getDoubleValue(Object obj) {
-        if (obj instanceof Number) return ((Number) obj).doubleValue();
-        if (obj != null) {
-            try { return Double.parseDouble(obj.toString()); } 
-            catch (NumberFormatException e) { return 0.0; }
-        }
-        return 0.0;
-    }
-}
