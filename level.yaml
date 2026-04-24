@@ -1,230 +1,57 @@
-aggregation_validation:
-  metadata:
-    project: "Database Automation Framework"
-    module: "Aggregation Records Validation"
-    level: "Level 4"
-    version: "5.0"
-    execution_type: "Database Driven"
-    processing_mode: "DB Cursor-Based Sequential Processing"
+test_plan:
+  id: "TC_AGGR_L4_001"
+  name: "Level 4 Aggregation Data Integrity Validation"
+  domain: "Regulatory Reporting / Leading European Bank"
+  description: "End-to-End database validation to ensure Level 4 aggregation records map correctly to staging and eligibility criteria, with accurate quantity and percentage calculations."
+  
+  global_parameters:
+    RunID: "Dynamic (e.g., 1001)"
+    JobID: "Dynamic (e.g., 5001)"
+    BusinessDate: "YYYY-MM-DD"
+    MonitorID: "Static per run (e.g., 1)"
+    RecordLimit: 10
 
-  objective:
-    description: >
-      Fetch one record at a time directly from lhone_aggr_pos table,
-      execute full validation pipeline on that record, then fetch next record
-      and repeat until all records are processed.
+  prerequisites:
+    - "Active JDBC connection to Preprod Database (lhone schema)."
+    - "Data populated in lhone_aggr_pos, lhone_stage_pos_copy, and lhone_europe_eligibility_pos."
+    - "Valid entries in monitor tables (lhone_monitor_rpt_cat, lhone_monitor_rpt_sub_cat, lhone_product_map)."
 
-  processing_strategy:
+  execution_flow:
+    - step: 1
+      name: "Fetch Aggregation Records"
+      action: "Query lhone_aggr_pos for given RunID and BusinessDate where AGGREGATION_LEVEL = 4."
+      validation: "Ensure records are returned. Fail test scenario if empty."
 
-    data_fetching_model:
-      type: "cursor_based"
-      description: >
-        Records are NOT loaded fully into memory.
-        Instead, one record is fetched, processed completely,
-        and only then the next record is fetched.
+    - step: 2
+      name: "Validate Staging Eligibility"
+      action: "INNER JOIN lhone_stage_pos_copy and lhone_europe_eligibility_pos using FILE_ID and LANDING_REC_ID."
+      validation: "Record is Eligible ONLY IF matching stage records exist and map to the correct MonitorID, JobID, and Business Date."
 
-    execution_flow:
+    - step: 3
+      name: "Report Category Validation"
+      action: "Evaluate REPORT_CATEGORY from aggregation."
+      validation: "Pass if 'Non-Exempt'. If else, validate holding classifications against lhone_monitor_rpt_cat. Default to Non-Exempt if no mapping is found."
 
-      step_1_fetch_single_record:
-        query: |
-          SELECT *
-          FROM lhone_aggr_pos
-          WHERE AGGREGATION_LEVEL = '4'
-          AND MONITOR_ID = 1
-          ORDER BY BUSINESS_DATE;
+    - step: 4
+      name: "Sub-Category and Product Mapping"
+      action: "Fetch product mapping rules for UK_LONG_SCOPE."
+      validation: "Ensure eligible staging records match the mapped PRODUCT_TYPE, PRODUCT_SUB_TYPE, and SETTLEMENT_TYPE constraints."
 
-        mode: "streaming / cursor"
+    - step: 5
+      name: "Total Underlying Quantity Calculation"
+      action: "Sum DELTA_UL_QUANTITY based on LONG_SHORT_INDICATOR."
+      business_rules: 
+        - "Skip record entirely if ISSUER_VOTING_RIGHTS_OUTSTANDING is null or empty."
+        - "If indicator is 'S' or 'SHORT', subtract delta."
+        - "If indicator is 'L' or 'LONG', add delta."
+        - "If calculated sum <= 0, default final value to 0.0."
+      validation: "Calculated Quantity must equal HOLDINGS_QUANTITY from aggr table (tolerance: 0.0001)."
 
-      step_2_iteration_control:
-        loop: "while(result_set.hasNext())"
-        actions:
-          - fetch_next_record
-          - process_record_end_to_end
-          - discard_context
-          - continue
+    - step: 6
+      name: "Holding Percentage Calculation"
+      action: "Calculate: (Calculated Quantity / ISSUER_VOTING_RIGHTS_OUTSTANDING) * 100."
+      validation: "Calculated Percentage must match HOLDING_PERCENTAGE from aggregation table. Fails if Voting Rights <= 0."
 
-      guarantees:
-        - "Only one record exists in memory at any time"
-        - "No cross-record data contamination"
-        - "Each record fully validated before next fetch"
-
-  tables:
-    aggregation_table: "lhone_aggr_pos"
-    stage_table: "lhone_stage_pos_copy"
-    eligibility_table: "lhone_europe_eligibility_pos"
-    reference_tables:
-      - "lhone_monitor_rpt_cat"
-      - "lhone_monitor_rpt_sub_cat"
-      - "lhone_product_map"
-
-  per_record_execution_pipeline:
-
-    step_0_initialize:
-      actions:
-        - reset_context
-        - TOTAL_UL_QUANTITY = 0
-
-    step_1_extract_data:
-      source: "current_record"
-      store:
-        LEI: SECURITY_IDENTIFIER_VALUE
-        PARENT_ENTITY: PARENT_ENTITY
-        REPORT_CATEGORY: REPORT_CATEGORY
-        REPORT_SUB_CATEGORY: REPORT_SUB_CATEGORY
-        HOLDING_QUANTITY: HOLDINGS_QUANTITY
-
-    step_2_validate_lei:
-      query: |
-        SELECT *
-        FROM lhone_stage_pos_copy
-        WHERE LEI = '<LEI>';
-      validation:
-        condition: "records_count > 0"
-        on_failure: "terminate_current_record"
-
-    step_3_validate_parent_entity:
-      query: |
-        SELECT *
-        FROM lhone_stage_pos_copy
-        WHERE LEI = '<LEI>'
-        AND SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
-      validation:
-        condition: "records_count > 0"
-        on_failure: "terminate_current_record"
-
-    step_4_eligibility_validation:
-      query: |
-        SELECT s.*, e.*
-        FROM lhone_stage_pos_copy s
-        JOIN lhone_europe_eligibility_pos e
-          ON s.FILE_ID = e.FILE_ID
-         AND s.LANDING_REC_ID = e.LANDING_REC_ID
-        WHERE s.LEI = '<LEI>'
-        AND s.SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
-
-      validation:
-        condition: "eligible_records_count > 0"
-        on_failure: "terminate_current_record"
-
-    step_5_resolve_report_category:
-
-      logic:
-
-        case_non_exempt:
-          condition: "REPORT_CATEGORY == 'Non-Exempt'"
-          output: "Non-Exempt"
-
-        case_derived:
-          condition: "REPORT_CATEGORY != 'Non-Exempt'"
-          steps:
-            - fetch_classification:
-                query: |
-                  SELECT HOLDING_CLASSIFICATION
-                  FROM lhone_stage_pos_copy
-                  WHERE LEI = '<LEI>'
-                  AND SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>';
-
-            - validate_reference:
-                query: |
-                  SELECT *
-                  FROM lhone_monitor_rpt_cat
-                  WHERE REPORT_CATEGORY = '<HOLDING_CLASSIFICATION>';
-
-          fallback:
-            output: "Non-Exempt"
-
-    step_6_validate_report_sub_category:
-
-      reference_check:
-        query: |
-          SELECT *
-          FROM lhone_monitor_rpt_sub_cat
-          WHERE SUB_REPORT_CATEGORY = '<REPORT_SUB_CATEGORY>';
-        validation:
-          condition: "records_count > 0"
-          on_failure: "terminate_current_record"
-
-      product_mapping:
-        query: |
-          SELECT *
-          FROM lhone_product_map
-          WHERE UK_LONG_CLASSIFICATION = '<REPORT_SUB_CATEGORY>'
-          AND UK_LONG_SCOPE = 'Y';
-
-        extract:
-          PRODUCT_TYPE_LIST
-          PRODUCT_SUB_TYPE_LIST
-          SETTLEMENT_TYPE_LIST
-
-    step_7_fetch_filtered_stage_records:
-      query: |
-        SELECT *
-        FROM lhone_stage_pos_copy
-        WHERE LEI = '<LEI>'
-        AND SDS_ENTITY_FIRST_L = '<PARENT_ENTITY>'
-        AND PRODUCT_TYPE IN (<PRODUCT_TYPE_LIST>)
-        AND PRODUCT_SUB_TYPE IN (<PRODUCT_SUB_TYPE_LIST>)
-        AND SETTLEMENT_TYPE IN (<SETTLEMENT_TYPE_LIST>);
-
-      validation:
-        condition: "records_count > 0"
-        on_failure: "terminate_current_record"
-
-    step_8_compute_total_ul_quantity:
-
-      initialization:
-        TOTAL_UL_QUANTITY: 0
-
-      computation_rule:
-
-        description: >
-          Subtract ONLY when:
-          LONG_SHORT_INDICATOR = 'S'
-          AND REPORT_SUB_CATEGORY = 'Shares'
-          Otherwise ADD
-
-      iteration:
-        for_each_record:
-
-          case_subtraction:
-            condition: "LONG_SHORT_INDICATOR == 'S' AND REPORT_SUB_CATEGORY == 'Shares'"
-            action: "TOTAL_UL_QUANTITY -= DELTA_UL_QUANTITY"
-
-          case_addition:
-            condition: "otherwise"
-            action: "TOTAL_UL_QUANTITY += DELTA_UL_QUANTITY"
-
-      post_processing:
-        condition: "TOTAL_UL_QUANTITY <= 0"
-        action: "TOTAL_UL_QUANTITY = 0"
-
-    step_9_final_validation:
-      validation:
-        condition: "TOTAL_UL_QUANTITY == HOLDING_QUANTITY"
-        on_failure: "mark_record_failed"
-
-    step_10_cleanup:
-      actions:
-        - clear_context
-        - release_memory
-
-  execution_control:
-    mode: "record_by_record"
-    failure_handling:
-      continue_on_failure: true
-      fail_fast: false
-
-  guarantees:
-    - "Strict one-record-at-a-time processing"
-    - "Each record fully validated before next fetch"
-    - "No shared state across records"
-    - "Deterministic and debuggable execution"
-
-  success_criteria:
-    - "Each record validated independently"
-    - "Correct TOTAL_UL_QUANTITY calculation"
-    - "Matches HOLDING_QUANTITY"
-
-  failure_criteria:
-    - "Validation failure at any step"
-    - "Computation mismatch"
-    - "Eligibility failure"
+  reporting:
+    format: "Detailed Excel Spreadsheet (.xlsx)"
+    failure_handling: "Soft assertions per record loop. Hard JUnit assertion at scenario conclusion if overall failure count > 0."
