@@ -1,9 +1,35 @@
-String query = "SELECT COUNT(*) as cnt " +
-               "FROM (" +
-               "SELECT file_id, landing_rec_id " +
-               "FROM LHONE_EXCEPTION_POS " +
-               "WHERE FILE_ID = ? " +
-               "AND TRUNC(BUSINESS_DATE) = TO_DATE(?, 'DD-MON-YYYY') " +
-               "AND MONITOR_ID = ? " +
-               "GROUP BY file_id, landing_rec_id" +
-               ")";
+Business Rules & Acceptance Criteria
+
+AC1: Data Extraction: The framework must fetch a configurable number of records (RecordLimit) from lhone_aggr_pos filtered by AGGREGATION_LEVEL = 4, RUN_ID, and BUSINESS_DATE.
+
+AC2: Staging Eligibility Check: * A record is only valid if it exists in lhone_stage_pos_copy.
+
+The staging record MUST also have a matching entry in lhone_europe_eligibility_pos joined on FILE_ID and LANDING_REC_ID, specifically filtered by the passed MONITOR_ID, JOB_ID, and BUSINESS_DATE.
+
+AC3: Report Category Logic: * If REPORT_CATEGORY is 'Non-Exempt', pass automatically.
+
+Otherwise, validate the staging HOLDING_CLASSIFICATION against lhone_monitor_rpt_cat. Default to 'Non-Exempt' if no mapping is found.
+
+AC4: Product Mapping (Sub-Category): The REPORT_SUB_CATEGORY must exist in lhone_monitor_rpt_sub_cat and must have valid underlying product configurations in lhone_product_map where UK_LONG_SCOPE = 'Y'.
+
+AC5: Quantity Calculation (TOTAL_UL_QUANTITY):
+
+Iterate through strictly eligible staging records.
+
+Skip Condition: Ignore any staging record where ISSUER_VOTING_RIGHTS_OUTSTANDING is null or empty.
+
+Math Logic: Sum the DELTA_UL_QUANTITY. Subtract if LONG_SHORT_INDICATOR is 'S' or 'SHORT'; otherwise, add.
+
+If the final calculated sum is <= 0, default the value to 0.0.
+
+Assert that the calculated quantity matches HOLDINGS_QUANTITY from the aggregation table (tolerance: 0.0001).
+
+AC6: Holding Percentage Calculation:
+
+Formula: (Calculated Quantity / ISSUER_VOTING_RIGHTS_OUTSTANDING) * 100.
+
+Assert that the calculated percentage matches HOLDING_PERCENTAGE from the aggregation table (tolerance: 0.0001).
+
+AC7: Reporting: Generate a detailed Excel (.xlsx) execution report capturing the calculated values and specific Pass/Fail reasons for every pipeline step per LEI.
+
+AC8: Pipeline Assertions: Soft assertions must be used during the record loop to allow the Excel report to generate fully. A hard JUnit assertion must fail the scenario at the very end if any overall record statuses are "FAILED".
