@@ -1,0 +1,45 @@
+{
+  "execution_config": {
+    "environment": "PREPROD",
+    "schema": "lhone",
+    "test_suite": "Aggregation Level 4 Validation",
+    "parameters": {
+      "record_limit": 10,
+      "monitor_id": 1,
+      "run_id": 1001,
+      "job_id": 5001,
+      "business_date": "2025-10-15"
+    },
+    "database_tables": {
+      "aggregation": "lhone_aggr_pos",
+      "staging": "lhone_stage_pos_copy",
+      "eligibility": "lhone_europe_eligibility_pos",
+      "monitor_category": "lhone_monitor_rpt_cat",
+      "monitor_sub_category": "lhone_monitor_rpt_sub_cat",
+      "product_mapping": "lhone_product_map"
+    },
+    "test_constraints": {
+      "float_comparison_delta": 0.0001,
+      "allow_negative_quantities": false,
+      "default_category_fallback": "Non-Exempt"
+    }
+  },
+  "expected_excel_schema": {
+    "columns": [
+      "LEI",
+      "Parent Entity",
+      "Aggr Report Category",
+      "Aggr Sub-Category",
+      "Expected Holdings Qty",
+      "Expected Holding %",
+      "Eligibility Status",
+      "Category Status",
+      "Sub-Category Status",
+      "Calculated Qty",
+      "Quantity Status",
+      "Calculated %",
+      "Percentage Status",
+      "Overall Status"
+    ]
+  }
+}
